@@ -1,8 +1,9 @@
 import math
 import tkinter as tk
-from drawing import DrawingApp
 import cv2
 import mediapipe as mp
+from drawing import DrawingApp
+from utils import listen_for_commands
 
 class GestureDrawingApp(DrawingApp):
     def __init__(self, master):
@@ -11,12 +12,35 @@ class GestureDrawingApp(DrawingApp):
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands()
         self.mp_drawing = mp.solutions.drawing_utils
-        
+
         self.pointer = None
         self.prev_x = None
         self.prev_y = None
+        self.drawing_enabled = False  # Default: drawing is disabled
+
+        # Add instruction text to canvas
+        self.instruction_text = self.canvas.create_text(
+            self.master.winfo_width() // 2, 30,
+            text="Say 'START' to start drawing", font=("Arial", 15), fill="gray", anchor="n"
+        )
+
+        # Start listening for voice commands
+        listen_for_commands(self.toggle_drawing)
 
         self.update()
+
+    def toggle_drawing(self, command):
+        """Toggle drawing state based on voice command."""
+        if command == "START":
+            self.drawing_enabled = True
+            self.update_instruction("Say 'STOP' to stop drawing")
+        elif command == "STOP":
+            self.drawing_enabled = False
+            self.update_instruction("Say 'START' to start drawing")
+
+    def update_instruction(self, text):
+        """Update the instruction text on the canvas dynamically."""
+        self.canvas.itemconfig(self.instruction_text, text=text)
 
     def update(self):
         ret, frame = self.cap.read()
@@ -31,29 +55,25 @@ class GestureDrawingApp(DrawingApp):
             for hand_landmarks in results.multi_hand_landmarks:
                 self.mp_drawing.draw_landmarks(frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
 
-                # Always get index finger tip
                 h, w, _ = frame.shape
                 tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 x, y = int(tip.x * w), int(tip.y * h)
 
-                # Determine if the finger is straight
                 finger_is_straight = self.is_index_finger_raised(hand_landmarks)
 
-                # Move pointer every time; draw line only if finger is straight
-                self.move_pointer_on_canvas(x, y, w, h, finger_is_straight)
+                self.move_pointer_on_canvas(x, y, w, h, finger_straight=finger_is_straight)
 
         cv2.imshow('Hand Gesture', frame)
         self.master.after(10, self.update)
 
     def move_pointer_on_canvas(self, x, y, frame_width, frame_height, finger_straight):
-        """Move a pointer on the canvas at all times; draw a line only if finger is straight."""
+        """Move a pointer on the canvas; draw a line only if finger is straight and drawing is enabled."""
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
 
         canvas_x = int(x * canvas_width / frame_width)
         canvas_y = int(y * canvas_height / frame_height)
 
-        # Create the pointer if it doesn't exist; otherwise move it
         if self.pointer is None:
             self.pointer = self.canvas.create_oval(
                 canvas_x - 5, canvas_y - 5, canvas_x + 5, canvas_y + 5,
@@ -65,35 +85,13 @@ class GestureDrawingApp(DrawingApp):
                 canvas_x - 5, canvas_y - 5, canvas_x + 5, canvas_y + 5
             )
 
-        # Draw a line from the previous pointer position to the new one only if finger is straight
-        if finger_straight and self.prev_x is not None and self.prev_y is not None:
+        if self.drawing_enabled and finger_straight and self.prev_x is not None and self.prev_y is not None:
             self.canvas.create_line(
                 self.prev_x, self.prev_y, canvas_x, canvas_y,
                 width=2, fill='black'
             )
 
         self.prev_x, self.prev_y = canvas_x, canvas_y
-
-    def is_index_finger_straight(self, hand_landmarks):
-        """Return True if index finger is at or above a certain angle threshold (e.g., 160°)."""
-        tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
-        dip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_DIP]
-        pip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_PIP]
-
-        v_dip_pip = (dip.x - pip.x, dip.y - pip.y, dip.z - pip.z)
-        v_tip_dip = (tip.x - dip.x, tip.y - dip.y, tip.z - dip.z)
-
-        dot_val = (v_dip_pip[0] * v_tip_dip[0] +
-                   v_dip_pip[1] * v_tip_dip[1] +
-                   v_dip_pip[2] * v_tip_dip[2])
-        mag1 = math.sqrt(v_dip_pip[0]**2 + v_dip_pip[1]**2 + v_dip_pip[2]**2)
-        mag2 = math.sqrt(v_tip_dip[0]**2 + v_tip_dip[1]**2 + v_tip_dip[2]**2)
-
-        if mag1 == 0 or mag2 == 0:
-            return False
-
-        angle = math.degrees(math.acos(dot_val / (mag1 * mag2)))
-        return angle >= 60
 
     def is_index_finger_raised(self, hand_landmarks):
         tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
