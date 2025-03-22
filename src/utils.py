@@ -1,10 +1,6 @@
 import speech_recognition as sr
 import threading
 
-def select_color():
-    # Function to select a color for drawing
-    pass
-
 def save_drawing(canvas, filename):
     # Function to save the current drawing to a file
     pass
@@ -32,6 +28,9 @@ def listen_for_commands(callback):
 
                     if command in ["START", "STOP"]:
                         callback(command)
+                    elif command.startswith("CHANGE COLOR TO"):
+                        color = command.replace("CHANGE COLOR TO ", "").lower()
+                        callback(f"CHANGE COLOR TO {color}")
 
                 except sr.UnknownValueError:
                     pass  # Ignore cases where the audio wasn't recognized

@@ -16,7 +16,8 @@ class GestureDrawingApp(DrawingApp):
         self.pointer = None
         self.prev_x = None
         self.prev_y = None
-        self.drawing_enabled = False  # Default: drawing is disabled
+        self.drawing_enabled = False
+        self.brush_color = 'black'
 
         # Add instruction text to canvas
         self.instruction_text = self.canvas.create_text(
@@ -25,18 +26,25 @@ class GestureDrawingApp(DrawingApp):
         )
 
         # Start listening for voice commands
-        listen_for_commands(self.toggle_drawing)
+        listen_for_commands(self.handle_command)
 
         self.update()
 
-    def toggle_drawing(self, command):
-        """Toggle drawing state based on voice command."""
+    def handle_command(self, command):
+        """Handle voice commands."""
         if command == "START":
             self.drawing_enabled = True
             self.update_instruction("Say 'STOP' to stop drawing")
         elif command == "STOP":
             self.drawing_enabled = False
             self.update_instruction("Say 'START' to start drawing")
+        elif command.startswith("CHANGE COLOR TO"):
+            color = command.replace("CHANGE COLOR TO ", "")
+            self.change_brush_color(color)
+
+    def change_brush_color(self, color):
+        """Change the brush color."""
+        self.brush_color = color
 
     def update_instruction(self, text):
         """Update the instruction text on the canvas dynamically."""
@@ -88,7 +96,7 @@ class GestureDrawingApp(DrawingApp):
         if self.drawing_enabled and finger_straight and self.prev_x is not None and self.prev_y is not None:
             self.canvas.create_line(
                 self.prev_x, self.prev_y, canvas_x, canvas_y,
-                width=2, fill='black'
+                width=2, fill=self.brush_color
             )
 
         self.prev_x, self.prev_y = canvas_x, canvas_y
