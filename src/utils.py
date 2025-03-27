@@ -1,5 +1,11 @@
 import speech_recognition as sr
 import threading
+import queue
+import sounddevice as sd
+import vosk
+import json
+import threading
+import os
 
 def save_drawing(canvas, filename):
     # Function to save the current drawing to a file
@@ -11,30 +17,35 @@ def load_drawing(filename):
 
 
 def listen_for_commands(callback):
-    """
-    Continuously listens for 'START' or 'STOP' voice commands and triggers the callback function.
-    """
-    recognizer = sr.Recognizer()
-    microphone = sr.Microphone()
+    model_path = os.path.join(os.path.dirname(__file__), "../models/vosk-model-small-en-us-0.15")
+    model = vosk.Model(model_path)
+    q = queue.Queue()
 
-    def listen():
-        with microphone as source:
-            recognizer.adjust_for_ambient_noise(source, duration=1)
+    def audio_callback(indata, frames, time, status):
+        if status:
+            print(status)
+        q.put(bytes(indata))
+
+    def recognition_loop():
+        with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
+                               channels=1, callback=audio_callback):
+            rec = vosk.KaldiRecognizer(model, 16000)
+            print("Listening for commands...")
 
             while True:
-                try:
-                    audio = recognizer.listen(source)
-                    command = recognizer.recognize_google(audio).strip().upper()
+                data = q.get()
+                if rec.AcceptWaveform(data):
+                    result = json.loads(rec.Result())
+                    text = result.get("text", "").upper()
+                    print("Heard:", text)
 
-                    if command in ["START", "STOP"]:
-                        callback(command)
-                    elif command.startswith("CHANGE COLOR TO"):
-                        color = command.replace("CHANGE COLOR TO ", "").lower()
+                    if text == "START":
+                        callback("START")
+                    elif text == "STOP":
+                        callback("STOP")
+                    elif text.startswith("CHANGE COLOR TO"):
+                        # Extract color
+                        color = text.replace("CHANGE COLOR TO", "").strip().lower()
                         callback(f"CHANGE COLOR TO {color}")
 
-                except sr.UnknownValueError:
-                    pass  # Ignore cases where the audio wasn't recognized
-
-    # Run in a separate thread to prevent blocking the main GUI
-    thread = threading.Thread(target=listen, daemon=True)
-    thread.start()
+    threading.Thread(target=recognition_loop, daemon=True).start()
