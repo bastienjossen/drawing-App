@@ -2,3 +2,5 @@ tkinter
 Pillow
 opencv-python
 mediapipe
+SpeechRecognition
+PyAudio
