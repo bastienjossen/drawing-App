@@ -20,20 +20,28 @@ def listen_for_commands(callback):
     def listen():
         with microphone as source:
             recognizer.adjust_for_ambient_noise(source, duration=1)
+            print("Listening for commands...")
 
             while True:
                 try:
                     audio = recognizer.listen(source)
                     command = recognizer.recognize_google(audio).strip().upper()
+                    print(f"Recognized command: {command}")  
 
-                    if command in ["START", "STOP"]:
+                    if command in ["START", "STOP", "SQUARE", "CIRCLE"]:
                         callback(command)
-                    elif command.startswith("CHANGE COLOR TO"):
-                        color = command.replace("CHANGE COLOR TO ", "").lower()
+                    elif command.startswith("CHANGE COLOR TO "):
+                        color = command.replace("CHANGE COLOR TO ", "").strip().lower()
                         callback(f"CHANGE COLOR TO {color}")
+                    elif command.startswith("CHANGE BRUSH TO "):
+                        brush_type = command.replace("CHANGE BRUSH TO ", "").strip().lower()
+                        callback(f"CHANGE BRUSH TO {brush_type}")
 
+                #debug
                 except sr.UnknownValueError:
-                    pass  # Ignore cases where the audio wasn't recognized
+                    print("Could not understand the audio.")
+                except sr.RequestError as e:
+                    print(f"Request error: {e}")
 
     # Run in a separate thread to prevent blocking the main GUI
     thread = threading.Thread(target=listen, daemon=True)
