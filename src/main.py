@@ -72,6 +72,18 @@ class GestureDrawingApp(DrawingApp):
             # Remove the command prefix and parse for an optional brush specifier.
             command_remainder = command.replace("CHANGE COLOR TO ", "").strip().lower()
             self.change_brush_color(command_remainder)
+        elif command.startswith("MY GUESS IS "):
+            guess = command.replace("MY GUESS IS ", "").strip().lower()
+            if guess == self.current_prompt.lower():
+                self.update_instruction(f"Accurate guess! the answer is indeed {self.current_prompt}.")
+
+                #Reset the game
+                self.canvas.delete("drawing")
+                self.drawing_enabled = False
+                self.current_prompt = random.choice(self.prompts)
+                self.update_instruction(f"Draw: {self.current_prompt}. Say 'START' to begin.")
+            else:
+                self.update_instruction(f"Wrong guess: {guess}. Keep trying!")
         elif command == "SQUARE":
             if not self.square_drawing_enabled:
                 print("handle_command: SQUARE recognized!")
@@ -121,7 +133,7 @@ class GestureDrawingApp(DrawingApp):
     def draw_solid_brush(self, x, y):
         if self.prev_coord:
             prev_x, prev_y = self.prev_coord
-            self.canvas.create_line(prev_x, prev_y, x, y, width=3, fill=self.brush_color)
+            self.canvas.create_line(prev_x, prev_y, x, y, width=3, fill=self.brush_color, tags="drawing")
 
     def draw_airbrush(self, x, y):
         dot_size = 3
@@ -130,7 +142,7 @@ class GestureDrawingApp(DrawingApp):
             radius = random.uniform(0, 10)
             offset_x = int(x + math.cos(angle) * radius)
             offset_y = int(y + math.sin(angle) * radius)
-            self.canvas.create_oval(offset_x, offset_y, offset_x + dot_size, offset_y + dot_size, fill=self.brush_color)
+            self.canvas.create_oval(offset_x, offset_y, offset_x + dot_size, offset_y + dot_size, fill=self.brush_color, tags="drawing")
 
     def draw_blending_brush(self, x, y):
         for _ in range(10):
@@ -143,7 +155,8 @@ class GestureDrawingApp(DrawingApp):
                 offset_x + radius, offset_y + radius,
                 fill=self.brush_color,
                 outline='',
-                stipple='gray50'  # Tkinter's fake transparency
+                stipple='gray50',  # Tkinter's fake transparency
+                tags="drawing"
             )
 
     def draw_shining_brush(self, x, y):
@@ -153,12 +166,12 @@ class GestureDrawingApp(DrawingApp):
             angle = (2 * math.pi / rays) * i
             end_x = x + length * math.cos(angle)
             end_y = y + length * math.sin(angle)
-            self.canvas.create_line(x, y, end_x, end_y, fill=self.brush_color)
+            self.canvas.create_line(x, y, end_x, end_y, fill=self.brush_color, tags="drawing")
 
         # Add central glow
         self.canvas.create_oval(
             x - 2, y - 2, x + 2, y + 2,
-            fill=self.brush_color, outline=''
+            fill=self.brush_color, outline='',tags="drawing"
         )
 
     def draw_eraser_brush(self, x, y):
@@ -169,7 +182,7 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.create_line(
                 prev_x, prev_y, x, y,
                 width=self.eraser_width,
-                fill=bg,
+                fill=bg, tags="drawing"
             )
 
     def update_calligraphy_width(self, current_coord):
@@ -250,7 +263,7 @@ class GestureDrawingApp(DrawingApp):
             p2[0], p2[1],
             p3[0], p3[1],
             p4[0], p4[1],
-            fill=self.brush_color, outline=self.brush_color
+            fill=self.brush_color, outline=self.brush_color,tags="drawing"
         )
 
         # Update the previous coordinate for the next segment.
@@ -288,7 +301,7 @@ class GestureDrawingApp(DrawingApp):
         if hasattr(self, 'square_preview') and self.square_preview:
             self.canvas.coords(self.square_preview, *corners)
         else:
-            self.square_preview = self.canvas.create_polygon(corners, outline='red', fill='red', width=5)
+            self.square_preview = self.canvas.create_polygon(corners, outline='red', fill='red', width=5,tags="drawing")
 
     def finalize_square(self):
         """
@@ -297,7 +310,7 @@ class GestureDrawingApp(DrawingApp):
         """
         if hasattr(self, 'square_preview') and self.square_preview:
             # Change the appearance to indicate finalization.
-            self.canvas.itemconfig(self.square_preview, outline='black', fill='', width=5)
+            self.canvas.itemconfig(self.square_preview, outline='black', fill='', width=5, tags="drawing")
             self.square_preview = None
 
     def update_circle_preview(self, x1, y1, x2, y2, frame_width, frame_height):
@@ -327,7 +340,7 @@ class GestureDrawingApp(DrawingApp):
         if hasattr(self, 'circle_preview') and self.circle_preview:
             self.canvas.coords(self.circle_preview, left, top, right, bottom)
         else:
-            self.circle_preview = self.canvas.create_oval(left, top, right, bottom, outline='red', fill='', width=5)
+            self.circle_preview = self.canvas.create_oval(left, top, right, bottom, outline='red', fill='', width=5, tags="drawing")
 
     def finalize_circle(self):
         if hasattr(self, 'circle_preview') and self.circle_preview:
@@ -396,7 +409,7 @@ class GestureDrawingApp(DrawingApp):
         if self.pointer_id is None:
             self.pointer_id = self.canvas.create_oval(
                 canvas_x - 5, canvas_y - 5, canvas_x + 5, canvas_y + 5,
-                fill="red", outline=""
+                fill="red", outline="", tags="drawing"
             )
         else:
             self.canvas.coords(
@@ -448,7 +461,7 @@ class GestureDrawingApp(DrawingApp):
             # Create a new pointer; for example, 10x10 pixel circle.
             pointer = self.canvas.create_oval(
                 canvas_x - 5, canvas_y - 5, canvas_x + 5, canvas_y + 5,
-                fill=color, outline=""
+                fill=color, outline="", tags="drawing"
             )
             setattr(self, pointer_attr, pointer)
         else:

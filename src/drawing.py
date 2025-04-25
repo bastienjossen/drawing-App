@@ -26,7 +26,7 @@ class DrawingApp:
         self.last_x, self.last_y = None, None
 
     def draw_line(self, x1, y1, x2, y2):
-        self.canvas.create_line(x1, y1, x2, y2, fill='black', width=2)
+        self.canvas.create_line(x1, y1, x2, y2, fill='black', width=2, tags="drawing")
 
     def clear_canvas(self):
         self.canvas.delete("all")
@@ -40,4 +40,4 @@ class DrawingApp:
         # Debug:
         # print(canvas_x, canvas_y)
 
-        self.canvas.create_oval(canvas_x - 1, canvas_y - 1, canvas_x + 1, canvas_y + 1, fill="black", width=2)
+        self.canvas.create_oval(canvas_x - 1, canvas_y - 1, canvas_x + 1, canvas_y + 1, fill="black", width=2, tags="drawing")
