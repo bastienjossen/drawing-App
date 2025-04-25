@@ -1,9 +1,11 @@
 import speech_recognition as sr
 import threading
 
+
 def save_drawing(canvas, filename):
     # Function to save the current drawing to a file
     pass
+
 
 def load_drawing(filename):
     # Function to load a drawing from a file
@@ -26,7 +28,7 @@ def listen_for_commands(callback):
                 try:
                     audio = recognizer.listen(source)
                     command = recognizer.recognize_google(audio).strip().upper()
-                    print(f"Recognized command: {command}")  
+                    print(f"Recognized command: {command}")
 
                     if command in ["START", "STOP", "SQUARE", "CIRCLE"]:
                         callback(command)
@@ -37,7 +39,7 @@ def listen_for_commands(callback):
                         brush_type = command.replace("CHANGE BRUSH TO ", "").strip().lower()
                         callback(f"CHANGE BRUSH TO {brush_type}")
 
-                #debug
+                # debug
                 except sr.UnknownValueError:
                     print("Could not understand the audio.")
                 except sr.RequestError as e:

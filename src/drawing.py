@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import Canvas, BOTH
 
+
 class DrawingApp:
     def __init__(self, master):
         self.master = master
@@ -33,7 +34,7 @@ class DrawingApp:
     def paint_event(self, x, y, frame_width, frame_height):
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
-        
+
         canvas_x = int(x * canvas_width / frame_width)
         canvas_y = int(y * canvas_height / frame_height)
         # Debug:
