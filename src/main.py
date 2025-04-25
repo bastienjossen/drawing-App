@@ -30,12 +30,23 @@ class GestureDrawingApp(DrawingApp):
         self.drawing_enabled = False
         self.circle_drawing_enabled = False
         self.square_drawing_enabled = False
+        self.guess_drawing_enabled = False
+
+        # Game prompts: 30 easily drawable objects
+        self.prompts = [
+            "Sun", "Tree", "House", "Car", "Cat", "Dog", "Boat", "Flower", "Cloud", "Star",
+            "Fish", "Heart", "Balloon", "Butterfly", "Ice Cream", "Cup", "Book", "Chair", "Cake", "Pencil",
+            "Apple", "Moon", "Rainbow", "Bird", "Key", "Umbrella", "Clock", "Camera", "Guitar", "Shoe"
+        ]
+        self.current_prompt = random.choice(self.prompts)
 
         # Add instruction text to canvas
         self.instruction_text = self.canvas.create_text(
-            self.master.winfo_width() // 2, 30,
-            text="Say 'START' to start drawing.\nSay 'SQUARE' or 'CIRCLE' to draw a square or circle.",
-            font=("Arial", 15), fill="gray", anchor="n"
+            self.master.winfo_width() * 5 // 3, 30,
+            text=f"Draw: {self.current_prompt}\n"
+                 "Say 'START' to start drawing.\n"
+                 "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
+            font=("Arial", 15), fill="black", anchor="n", justify="center"
         )
 
         # Start listening for voice commands
@@ -48,7 +59,8 @@ class GestureDrawingApp(DrawingApp):
         if command == "START":
             self.drawing_enabled = True
             self.update_instruction(
-                "Say 'STOP' to stop drawing.\nSay 'CHANGE BRUSH TO SOLID / AIR / SHINING / CALLIGRAPHY / BLENDING' to change the brush type.")
+                "Say 'STOP' to stop drawing.\nSay 'CHANGE BRUSH TO SOLID / AIR / SHINING / CALLIGRAPHY / BLENDING' to "
+                "change the brush type. \n Say 'CHANGE BRUSH TO ERASER' to start cleaning")
         elif command == "STOP":
             self.drawing_enabled = False
             self.update_instruction(
@@ -66,7 +78,8 @@ class GestureDrawingApp(DrawingApp):
                 self.drawing_enabled = False
                 self.square_drawing_enabled = True
                 self.update_instruction(
-                    "Square drawing mode on. Move your thumb and index finger to adjust the size.\nSay 'SQUARE' to finalize.")
+                    "Square drawing mode on. Move your thumb and index finger to adjust the size.\nSay 'SQUARE' to "
+                    "finalize.")
 
             else:
                 self.square_drawing_enabled = False
@@ -80,7 +93,8 @@ class GestureDrawingApp(DrawingApp):
                 self.drawing_enabled = False
                 self.circle_drawing_enabled = True
                 self.update_instruction(
-                    "Circle drawing mode on. Move your thumb and index finger to adjust the size.\nSay 'CIRCLE' to finalize.")
+                    "Circle drawing mode on. Move your thumb and index finger to adjust the size.\nSay 'CIRCLE' to "
+                    "finalize.")
             else:
                 self.circle_drawing_enabled = False
                 self.finalize_circle()

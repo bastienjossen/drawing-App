@@ -8,7 +8,7 @@ class DrawingApp:
         self.setup_canvas()
 
     def setup_canvas(self):
-        self.canvas = tk.Canvas(self.master, bg='white')
+        self.canvas = tk.Canvas(self.master, bg='white', width=800, height=600)
         self.canvas.pack(fill=tk.BOTH, expand=True)
         # Make sure there are no lines like:
         # self.canvas.bind("<B1-Motion>", self.some_method)

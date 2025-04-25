@@ -38,6 +38,9 @@ def listen_for_commands(callback):
                     elif command.startswith("CHANGE BRUSH TO "):
                         brush_type = command.replace("CHANGE BRUSH TO ", "").strip().lower()
                         callback(f"CHANGE BRUSH TO {brush_type}")
+                    elif command.startswith("MY GUESS IS "):
+                        guess = command.replace("MY GUESS IS ", "").strip().lower()
+                        callback(f"MY GUESS IS {guess}")
 
                 # debug
                 except sr.UnknownValueError:
