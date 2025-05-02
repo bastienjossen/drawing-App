@@ -87,14 +87,3 @@ gesture_drawing/
 requirements.txt           # Third‑party deps (MediaPipe, OpenCV‑Python, etc.)
 README.md                  # You’re reading it
 ```
-
----
-
-## 🛠️ Roadmap / Ideas
-
-* Saving & loading drawings (`storage.py`)
-* Additional shapes (triangle, polygon)
-* Multi‑player guessing via sockets
-* Packaging to `pip install gesture‑drawing`
-
-Pull requests are welcome! 🎨
