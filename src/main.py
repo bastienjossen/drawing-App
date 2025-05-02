@@ -60,11 +60,21 @@ class GestureDrawingApp(DrawingApp):
         if command == "START":
             self.drawing_enabled = True
             self.update_instruction(
-                "Say 'STOP' to stop drawing.\nSay 'BRUSH' to open brush selector.\nSay 'CHANGE COLOR TO RED / BLUE / etc.' to change color.")
+                "Say 'STOP' to stop drawing.\nSay 'BRUSH' to open brush selector.\nSay 'CHANGE COLOR TO RED / BLUE / etc.' to change color.\nSay 'ERASER' to start erasing.")
         elif command == "STOP":
             self.drawing_enabled = False
+
+            # Reset brush type and color if currently erasing
+            if self.brush_type == "eraser":
+                self.brush_type = "solid"
+                self.brush_color = "black"
+
+            # Restore the initial instruction
             self.update_instruction(
-                "Say 'START' to start drawing.\nSay 'SQUARE' or 'CIRCLE' to draw a square or circle.")
+                f"Draw: {self.current_prompt}\n"
+                "Say 'START' to start drawing.\n"
+                "Say 'SQUARE' or 'CIRCLE' to draw a square or circle."
+            )
         elif command.startswith("CHANGE COLOR TO "):
             command_remainder = command.replace("CHANGE COLOR TO ", "").strip().lower()
             self.change_brush_color(command_remainder)
@@ -107,6 +117,12 @@ class GestureDrawingApp(DrawingApp):
                 self.circle_drawing_enabled = False
                 self.finalize_circle()
                 self.update_instruction("Circle drawing finalized. Say 'CIRCLE' to start again.")
+        elif command == "ERASER":
+            self.brush_type = "eraser"
+            self.drawing_enabled = True
+            self.update_instruction(
+                "Say 'STOP' to stop erasing."
+            )
         elif command == "BRUSH":
             self.update_instruction("Brush menu opened. Say the brush type...")
             BrushSelectionPopup(self.master, self.change_brush_type)

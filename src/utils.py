@@ -31,7 +31,7 @@ def listen_for_commands(callback):
                     command = recognizer.recognize_google(audio).strip().upper()
                     print(f"Recognized command: {command}")
 
-                    if command in ["START", "STOP", "SQUARE", "CIRCLE", "BRUSH"]:
+                    if command in ["START", "STOP", "SQUARE", "CIRCLE", "BRUSH", "ERASER"]:
                         callback(command)
                     elif command.startswith("CHANGE COLOR TO "):
                         color = command.replace("CHANGE COLOR TO ", "").strip().lower()
