@@ -124,13 +124,13 @@ class GestureDrawingApp(DrawingApp):
                 "Say 'STOP' to stop erasing."
             )
         elif command == "BRUSH":
-            self.update_instruction("Brush menu opened. Say the brush type...")
+            self.update_instruction("Brush menu opened. Select the brush type...")
             BrushSelectionPopup(self.master, self.change_brush_type)
 
     def change_brush_type(self, brush_type):
         print(f"[Brush Popup] Selected brush: {brush_type}")
         self.brush_type = brush_type
-        self.update_instruction(f"Brush changed to {brush_type}. Say 'START' to resume drawing.")
+        self.update_instruction(f"Brush changed to {brush_type}.\nSay 'STOP' to stop drawing.\nSay 'BRUSH' to open brush selector.\nSay 'CHANGE COLOR TO RED / BLUE / etc.' to change color.\nSay 'ERASER' to start erasing.")
 
     def change_brush_color(self, color, brush_index=None):
         """Change the brush color if valid; if brush_index is provided, update that specific brush."""
