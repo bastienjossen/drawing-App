@@ -1,3 +1,5 @@
+# __init__.py
+
 """Gesture Drawing Application – package init."""
 __all__ = [
     "GestureDrawingApp",

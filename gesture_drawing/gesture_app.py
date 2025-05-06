@@ -1,3 +1,5 @@
+# gesture_app.py
+
 """Main application that combines hand tracking, voice and drawing."""
 from __future__ import annotations
 
@@ -215,6 +217,8 @@ class GestureDrawingApp(DrawingApp):
 
         if result.multi_hand_landmarks:
             self._handle_hand(result.multi_hand_landmarks[0], frame.shape)
+
+        self.canvas.tag_raise(self.instruction_text)
 
         cv2.imshow("Hand Gesture", frame)
         cv2.waitKey(1)

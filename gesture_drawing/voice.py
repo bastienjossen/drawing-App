@@ -1,3 +1,5 @@
+# voice.py
+
 """Voice‑command utilities (speech_recognition wrapper)."""
 from __future__ import annotations
 
@@ -15,11 +17,12 @@ _SUPPORTED_PREFIXES = (
     "STOP",
     "SQUARE",
     "CIRCLE",
+    "BRUSH",
+    "ERASER",
     "CHANGE COLOR TO ",
     "CHANGE BRUSH TO ",
     "MY GUESS IS ",
 )
-
 
 def listen_for_commands(callback: CommandCallback) -> None:
     """Continuously listen and dispatch recognised voice commands.
@@ -65,6 +68,8 @@ class BrushSelectionPopup:
 
         self.on_select = on_select
         self.valid = ["solid", "air", "texture", "calligraphy", "blending", "shining"]
+
+        # Kick off the worker thread
         self._listen_for_choice()
 
     def _listen_for_choice(self):
@@ -72,20 +77,26 @@ class BrushSelectionPopup:
         mic   = sr.Microphone()
 
         def _worker():
+            cmd = ""
             with mic as src:
-                recog.adjust_for_ambient_noise(src, 0.5)
+                recog.adjust_for_ambient_noise(src, duration=0.5)
                 try:
                     audio = recog.listen(src, timeout=5)
-                    cmd   = recog.recognize_google(audio).strip().lower()
+                    cmd = recog.recognize_google(audio).strip().lower()
                     match = difflib.get_close_matches(cmd, self.valid, n=1, cutoff=0.6)
                     if match:
+                        # valid brush name picked
                         self.on_select(match[0])
                         self.top.destroy()
                         return
-                except Exception:
-                    pass
-
-                self.label.config(text=f"'{cmd}' not recognized.\nClosing…")
-                self.top.after(2000, self.top.destroy)
+                    # unrecognized word
+                    self.label.config(text=f"'{cmd}' not recognized.\nClosing…")
+                except sr.UnknownValueError:
+                    self.label.config(text="Could not understand.\nClosing…")
+                except Exception as e:
+                    self.label.config(text=f"Error: {e}\nClosing…")
+                finally:
+                    # always close after 2 s
+                    self.top.after(2000, self.top.destroy)
 
         threading.Thread(target=_worker, daemon=True).start()
