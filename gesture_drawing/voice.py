@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import threading
 from typing import Callable
+import tkinter as tk
+import difflib
 
 import speech_recognition as sr
 
@@ -46,3 +48,44 @@ def listen_for_commands(callback: CommandCallback) -> None:
                     print(f"Speech‑API request error: {exc}")
 
     threading.Thread(target=_listener, daemon=True).start()
+
+class BrushSelectionPopup:
+    """Popup that listens for a brush name and returns the closest match."""
+    def __init__(self, parent: tk.Tk | tk.Toplevel, on_select: Callable[[str], None]):
+        self.top = tk.Toplevel(parent)
+        self.top.title("Select Brush")
+        self.top.geometry("300x250")
+
+        self.label = tk.Label(
+            self.top,
+            text="Say the brush name:\nSolid, Air, Texture,\nCalligraphy, Blending, Shining",
+            font=("Arial", 12), wraplength=280, justify="center"
+        )
+        self.label.pack(pady=20)
+
+        self.on_select = on_select
+        self.valid = ["solid", "air", "texture", "calligraphy", "blending", "shining"]
+        self._listen_for_choice()
+
+    def _listen_for_choice(self):
+        recog = sr.Recognizer()
+        mic   = sr.Microphone()
+
+        def _worker():
+            with mic as src:
+                recog.adjust_for_ambient_noise(src, 0.5)
+                try:
+                    audio = recog.listen(src, timeout=5)
+                    cmd   = recog.recognize_google(audio).strip().lower()
+                    match = difflib.get_close_matches(cmd, self.valid, n=1, cutoff=0.6)
+                    if match:
+                        self.on_select(match[0])
+                        self.top.destroy()
+                        return
+                except Exception:
+                    pass
+
+                self.label.config(text=f"'{cmd}' not recognized.\nClosing…")
+                self.top.after(2000, self.top.destroy)
+
+        threading.Thread(target=_worker, daemon=True).start()
