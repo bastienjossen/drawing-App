@@ -1,3 +1,5 @@
+# gesture_app.py
+
 """Main application that combines hand tracking, voice and drawing."""
 from __future__ import annotations
 
@@ -130,6 +132,25 @@ class GestureDrawingApp(DrawingApp):
         if cmd.startswith("CHANGE COLOR TO "):
             self._change_colour(cmd.removeprefix("CHANGE COLOR TO ").strip().lower())
             return
+        
+        if cmd == "ERASER":
+            # Switch into eraser brush immediately
+            self.brush.kind = BrushType.ERASER
+            self.drawing_enabled = True
+            self._set_instruction(
+                self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing.")
+            )
+            return
+    
+        if cmd == "BRUSH":
+            # Open the voice-driven brush selector popup
+            from .voice import BrushSelectionPopup
+    
+            self._set_instruction(
+                self._instruction_banner("Say the brush name…")
+            )
+            BrushSelectionPopup(self.master, self._change_brush_kind)
+            return
 
         if cmd == "SQUARE":
             self._toggle_shape("square")
@@ -142,6 +163,13 @@ class GestureDrawingApp(DrawingApp):
             self._evaluate_guess(cmd.removeprefix("MY GUESS IS ").strip())
             return
 
+    def _change_brush_kind(self, kind: str) -> None:
+        """Callback from BrushSelectionPopup with a valid brush name."""
+        print(f"[Popup] Selected brush: {kind}")
+        self.brush.kind = BrushType(kind)  # kind is already lowercase
+        self._set_instruction(
+            self._instruction_banner(f"Brush set to {kind}. Say 'STOP' to halt.")
+        )
     # ---------------------------------------------------------------------
     def _toggle_shape(self, shape: str) -> None:  # square / circle
         attr = f"{shape}_drawing_enabled"
@@ -189,6 +217,8 @@ class GestureDrawingApp(DrawingApp):
 
         if result.multi_hand_landmarks:
             self._handle_hand(result.multi_hand_landmarks[0], frame.shape)
+
+        self.canvas.tag_raise(self.instruction_text)
 
         cv2.imshow("Hand Gesture", frame)
         cv2.waitKey(1)

@@ -1,3 +1,5 @@
+# drawing.py
+
 """Generic Tkinter canvas that other classes can extend."""
 from __future__ import annotations
 
