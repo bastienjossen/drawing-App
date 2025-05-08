@@ -1,100 +1,133 @@
 # voice.py
 
-"""Voice‑command utilities (speech_recognition wrapper)."""
+"""Voice-command utilities (speech_recognition wrapper)."""
 from __future__ import annotations
 
 import threading
-from typing import Callable
+import time
+from typing import Callable, Optional
 import tkinter as tk
 import difflib
 
 import speech_recognition as sr
-from typing import Callable, Optional
 
-# your new router:
-from .llm_router import normalise  
+# your routers:
+from .llm_router import normalise, normalise_brush
 
+# ── GLOBAL FLAG ────────────────────────────────────────────────────────────────
+# When set, the normal listen_for_commands loop will sleep instead of
+# processing—so only popup logic runs.
+popup_active = threading.Event()
+
+# ── GENERAL LISTENER ───────────────────────────────────────────────────────────
 CommandCallback = Callable[[str], None]
-_SUPPORTED_PREFIXES = (
-    "START",
-    "STOP",
-    "SQUARE",
-    "CIRCLE",
-    "BRUSH",
-    "ERASER",
-    "CHANGE COLOR TO ",
-    "CHANGE BRUSH TO ",
-    "MY GUESS IS ",
-)
 
 def listen_for_commands(callback: CommandCallback) -> None:
-    """Continuously listen, normalise via local model, then dispatch."""
+    """Continuously listen, normalise via local model, then dispatch,
+    but automatically pause while popup_active is set."""
     def _listener() -> None:
         recog = sr.Recognizer()
         with sr.Microphone() as src:
             recog.adjust_for_ambient_noise(src, duration=1)
             print("Listening for commands…")
             while True:
+                # If popup is active, sleep and skip recognition
+                if popup_active.is_set():
+                    time.sleep(0.4)
+                    continue
+
                 try:
                     audio = recog.listen(src)
                     transcript = recog.recognize_google(audio).strip()
-                    print(f"Heard: {transcript!r}")
+                    print(f"[Normal] Heard: {transcript!r}")
                     cmd = normalise(transcript)
                     if cmd:
                         print(f"→ Normalised to: {cmd}")
                         callback(cmd)
                 except sr.UnknownValueError:
-                    print("Could not understand the audio – ignored.")
+                    print("Could not understand the audio – ignored.")
                 except sr.RequestError as exc:
-                    print(f"Speech‑API request error: {exc}")
+                    print(f"Speech-API request error: {exc}")
 
     threading.Thread(target=_listener, daemon=True).start()
 
+
+# ── BRUSH POPUP ────────────────────────────────────────────────────────────────
 class BrushSelectionPopup:
-    """Popup that listens for a brush name and returns the closest match."""
+    """Popup that listens for a brush name (via LLM) and returns the match."""
     def __init__(self, parent: tk.Tk | tk.Toplevel, on_select: Callable[[str], None]):
+        # SIGNAL: enter brush-popup mode (mute normal listener)
+        popup_active.set()
+
         self.top = tk.Toplevel(parent)
         self.top.title("Select Brush")
         self.top.geometry("300x250")
+        # ensure we clear the flag even if user closes window manually
+        self.top.protocol("WM_DELETE_WINDOW", self._on_close)
 
+        self.prompt_text = (
+            "Say the brush name:\n"
+            "Solid, Air, Texture,\n"
+            "Calligraphy, Blending, Shining"
+        )
         self.label = tk.Label(
             self.top,
-            text="Say the brush name:\nSolid, Air, Texture,\nCalligraphy, Blending, Shining",
-            font=("Arial", 12), wraplength=280, justify="center"
+            text=self.prompt_text,
+            font=("Arial", 12),
+            wraplength=280,
+            justify="center"
         )
         self.label.pack(pady=20)
 
         self.on_select = on_select
-        self.valid = ["solid", "air", "texture", "calligraphy", "blending", "shining"]
+        self.valid = {"solid", "air", "texture", "calligraphy", "blending", "shining"}
 
-        # Kick off the worker thread
+        # start the popup-specific listener
         self._listen_for_choice()
+
+    def _on_close(self):
+        """Clear the flag and destroy if popup closed manually."""
+        popup_active.clear()
+        self.top.destroy()
 
     def _listen_for_choice(self):
         recog = sr.Recognizer()
         mic   = sr.Microphone()
 
         def _worker():
-            cmd = ""
             with mic as src:
                 recog.adjust_for_ambient_noise(src, duration=0.5)
                 try:
-                    audio = recog.listen(src, timeout=5)
-                    cmd = recog.recognize_google(audio).strip().lower()
-                    match = difflib.get_close_matches(cmd, self.valid, n=1, cutoff=0.6)
-                    if match:
-                        # valid brush name picked
-                        self.on_select(match[0])
+                    audio = recog.listen(src, timeout=10)
+                    transcript = recog.recognize_google(audio).strip()
+                    print(f"[BrushPopup] Heard: {transcript!r}")
+
+                    # use your brush-only LLM
+                    brush = normalise_brush(transcript)
+                    if brush in self.valid:
+                        print(f"[BrushPopup] Selected brush: {brush}")
+                        # SIGNAL: exit brush-popup mode
+                        popup_active.clear()
+                        self.on_select(brush)
                         self.top.destroy()
                         return
-                    # unrecognized word
-                    self.label.config(text=f"'{cmd}' not recognized.\nClosing…")
+
+                    # invalid input → prompt retry
+                    self.label.config(
+                        text=f"‘{transcript}’ not a brush.\nPlease try again."
+                    )
                 except sr.UnknownValueError:
-                    self.label.config(text="Could not understand.\nClosing…")
+                    self.label.config(text="Could not understand.\nPlease try again.")
                 except Exception as e:
-                    self.label.config(text=f"Error: {e}\nClosing…")
-                finally:
-                    # always close after 2 s
-                    self.top.after(2000, self.top.destroy)
+                    self.label.config(text=f"Error: {e}\nPlease try again.")
+
+            # after 2 s, reset prompt and listen again
+            self.top.after(
+                2000,
+                lambda: (
+                    self.label.config(text=self.prompt_text),
+                    self._listen_for_choice()
+                )
+            )
 
         threading.Thread(target=_worker, daemon=True).start()
