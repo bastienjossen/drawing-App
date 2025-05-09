@@ -96,7 +96,7 @@ class BrushSelectionPopup:
 
         def _worker():
             with mic as src:
-                recog.adjust_for_ambient_noise(src, duration=0.5)
+                recog.adjust_for_ambient_noise(src, duration=1)
                 try:
                     audio = recog.listen(src, timeout=10)
                     transcript = recog.recognize_google(audio).strip()
@@ -104,6 +104,7 @@ class BrushSelectionPopup:
 
                     # use your brush-only LLM
                     brush = normalise_brush(transcript)
+
                     if brush in self.valid:
                         print(f"[BrushPopup] Selected brush: {brush}")
                         # SIGNAL: exit brush-popup mode

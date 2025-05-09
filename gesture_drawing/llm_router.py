@@ -3,10 +3,32 @@ from __future__ import annotations
 import requests
 from functools import lru_cache
 from typing import Optional
+import os
+import json
 
-# ─── Directly embed your key & endpoint ──────────────────────────────
-API_KEY = "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"
-API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# ─── Load config from llm_config.json ────────────────────────────────
+_cfg_path = os.path.join(os.path.dirname(__file__), "llm_config.json")
+try:
+    with open(_cfg_path, "r", encoding="utf-8") as _f:
+        _cfg = json.load(_f)
+except FileNotFoundError:
+    raise RuntimeError(f"Could not find configuration file at {_cfg_path!r}")
+except json.JSONDecodeError as e:
+    raise RuntimeError(f"Invalid JSON in config file {_cfg_path!r}: {e}")
+
+API_KEY = _cfg.get("API_KEY")
+API_URL = _cfg.get(
+    "API_URL",
+    "https://api.groq.com/openai/v1/chat/completions"
+)
+
+if not API_KEY:
+    raise RuntimeError(f"`API_KEY` missing from config file {_cfg_path!r}")
+
+HEADERS = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {API_KEY}",
+}
 
 SYSTEM_PROMPT = """\
 You are a command parser. If the message is unrelated to drawing, reply with nothing.
@@ -18,12 +40,24 @@ replacing <COLOR> with the exact color they mention.
 When the user requests a brush change but does not name one, reply:
   BRUSH
 
-Do not explain or comment.
+When the user wants to put a square on the canvas, reply:
+    SQUARE
+When the user wants to put a circle on the canvas, reply:
+    CIRCLE
+    
+When the user wants to erase something, reply:
+    ERASER
+    
+When the user wants to start drawing, reply:
+    START
+    
+When the user wants to stop drawing, reply:
+    STOP
 
-Valid commands:
-START, STOP, SQUARE, CIRCLE, ERASER, BRUSH,
-CHANGE BRUSH TO <BRUSH>, CHANGE COLOR TO <COLOR>,
-MY GUESS IS <word>
+WHen the user wants to submit his guess, reply:
+    MY GUESS IS <word>
+
+Do not explain or comment.
 """
 
 HEADERS = {
