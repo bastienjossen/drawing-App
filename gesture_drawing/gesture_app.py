@@ -61,9 +61,9 @@ class GestureDrawingApp(DrawingApp):
 
         # --- drawing‑state --------------------------------------------------
         self.brush = Brush()
-        self.prev_coord: tuple[int, int] | None = None
-        self.pointer_id: int | None = None  # canvas item id for fingertip
-        self.last_time: float | None = None
+        self.pointer_ids: dict[int, int] = {} 
+        self.prev_coords: dict[int, tuple[int,int]] = {}
+        self.last_times: dict[int, float] = {}
         self.eraser_width = 20
         self.max_calligraphy_width = 25
         self.min_calligraphy_width = 5
@@ -215,8 +215,19 @@ class GestureDrawingApp(DrawingApp):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         result = self._hands.process(rgb)
 
+        seen: set[int] = set()
         if result.multi_hand_landmarks:
-            self._handle_hand(result.multi_hand_landmarks[0], frame.shape)
+            for idx, hand in enumerate(result.multi_hand_landmarks):
+                seen.add(idx)
+                self._handle_hand(hand, frame.shape, idx)
+
+        
+        # clean‑up cursors/state for hands that disappeared
+        for hid in set(self.pointer_ids) - seen:
+            self.canvas.delete(self.pointer_ids.pop(hid))
+            self.prev_coords.pop(hid, None)
+            self.last_times.pop(hid, None)             # add END
+        #----
 
         self.canvas.tag_raise(self.instruction_text)
 
@@ -224,7 +235,7 @@ class GestureDrawingApp(DrawingApp):
         cv2.waitKey(1)
         self.master.after(10, self._update_frame)
 
-    def _handle_hand(self, landmarks: Any, frame_shape: tuple[int, int, int]) -> None:
+    def _handle_hand(self, landmarks: Any, frame_shape: tuple[int, int, int], hand_id:int) -> None:
         self._mpdraw.draw_landmarks(self.frame, landmarks, self._mphands.HAND_CONNECTIONS)
         h, w, _ = frame_shape
         tip = landmarks.landmark[self._mphands.HandLandmark.INDEX_FINGER_TIP]
@@ -236,18 +247,20 @@ class GestureDrawingApp(DrawingApp):
             self._update_square_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)
         elif self.circle_drawing_enabled:
             thumb = landmarks.landmark[self._mphands.HandLandmark.THUMB_TIP]
-            self._update_circle_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)
+            self._update_circle_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)     
         else:
-            self._move_pointer(x1, y1, w, h, finger_straight)
+            self._move_pointer(x1, y1, w, h, finger_straight, hand_id)
 
     # ------------------------------ drawing primitives --------------------
-    def _move_pointer(self, x: int, y: int, frame_w: int, frame_h: int, finger_straight: bool) -> None:
+    def _move_pointer(self, x: int, y: int, frame_w: int, frame_h: int, finger_straight: bool, hand_id:int) -> None:
         cx, cy = self.to_canvas(x, y, frame_w=frame_w, frame_h=frame_h)
 
-        if self.pointer_id is None:
-            self.pointer_id = self.canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="", tags="drawing")
+        if hand_id not in self.pointer_ids:
+            self.pointer_ids[hand_id] = self.canvas.create_oval(
+                cx-5, cy-5, cx+5, cy+5, fill="red", outline="", tags="drawing")
         else:
-            self.canvas.coords(self.pointer_id, cx - 5, cy - 5, cx + 5, cy + 5)
+            self.canvas.coords(self.pointer_ids[hand_id],
+                               cx-5, cy-5, cx+5, cy+5)
 
         if self.drawing_enabled and finger_straight:
             draw_func = {
@@ -259,15 +272,24 @@ class GestureDrawingApp(DrawingApp):
                 BrushType.SHINING: self._draw_shining,
                 BrushType.ERASER: self._draw_eraser,
             }[self.brush.kind]
-            draw_func(cx, cy)
-        self.prev_coord = (cx, cy)
+            draw_func(cx, cy, hand_id)
+        self.prev_coords[hand_id] = (cx, cy)
 
     # -- individual brush implementations ---------------------------------
-    def _draw_solid(self, x: int, y: int) -> None:
-        if self.prev_coord:
-            self.canvas.create_line(*self.prev_coord, x, y, width=3, fill=self.brush.colour, tags="drawing")
+    def _draw_solid(self, x: int, y: int, hand_id:int) -> None:
 
-    def _draw_air(self, x: int, y: int) -> None:
+        prev = self.prev_coords.get(hand_id)
+        if prev:
+            self.canvas.create_line(*prev, x, y, width=3,
+                                    fill=self.brush.colour, tags="drawing")
+
+    def _draw_air(self, x: int, y: int, hand_id:int) -> None:
+
+        prev = self.prev_coords.get(hand_id)
+        if not prev:
+            self.prev_coords[hand_id] = (x, y)
+            return
+
         for _ in range(20):
             angle = random.uniform(0, 2 * math.pi)
             radius = random.uniform(0, 10)
@@ -275,18 +297,20 @@ class GestureDrawingApp(DrawingApp):
             oy = int(y + math.sin(angle) * radius)
             self.canvas.create_oval(ox, oy, ox + 3, oy + 3, fill=self.brush.colour, tags="drawing")
 
-    def _draw_texture(self, x: int, y: int) -> None:
+    def _draw_texture(self, x: int, y: int, hand_id:int) -> None:
         # simple stippled effect – extend as needed
         self.canvas.create_text(x, y, text="✶", fill=self.brush.colour, font=("Arial", 10), tags="drawing")
 
     # --- calligraphy with dynamic width ----------------------------------
-    def _draw_calligraphy(self, x: int, y: int) -> None:
-        if not self.prev_coord:
-            self.prev_coord = (x, y)
+    def _draw_calligraphy(self, x: int, y: int, hand_id:int) -> None:
+
+        prev = self.prev_coords.get(hand_id)
+        if not prev:
+            self.prev_coords[hand_id] = (x, y)
             return
-        width = self._calligraphy_width((x, y))
+        width = self._calligraphy_width(hand_id, (x, y))
         offset = width / 2
-        px, py = self.prev_coord
+        px, py = self.prev_coords[hand_id]
         dx, dy = x - px, y - py
         if math.hypot(dx, dy) < 1:
             return
@@ -299,27 +323,30 @@ class GestureDrawingApp(DrawingApp):
             x - ox, y - oy,
         )
         self.canvas.create_polygon(*poly, fill=self.brush.colour, outline=self.brush.colour, tags="drawing")
-        self.prev_coord = (x, y)
+        self.prev_coords[hand_id] = (x, y)
 
-    def _calligraphy_width(self, curr: tuple[int, int]) -> float:
+    def _calligraphy_width(self, curr: tuple[int, int], hand_id:int) -> float:
+
         now = time.time()
-        if self.last_time is None or self.prev_coord is None:
-            self.last_time = now
+        last = self.last_times.get(hand_id)
+        prev = self.prev_coords.get(hand_id)
+        if last is None or prev is None:
+            self.last_times[hand_id] = now
             return self.max_calligraphy_width
-        dt = now - self.last_time or 1e-5
-        dist = math.hypot(curr[0] - self.prev_coord[0], curr[1] - self.prev_coord[1])
-        speed = dist / dt
-        self.last_time = now
-        return max(self.min_calligraphy_width, self.max_calligraphy_width - speed * self.width_scaling)
+        dt = now - last or 1e-5
+        dist = math.hypot(curr[0] - prev[0], curr[1] - prev[1])
+        self.last_times[hand_id] = now
+        return max(self.min_calligraphy_width,
+                self.max_calligraphy_width - dist / dt * self.width_scaling)
 
     # ---------------------------------------------------------------------
-    def _draw_blending(self, x: int, y: int) -> None:
+    def _draw_blending(self, x: int, y: int, hand_id:int) -> None:
         for _ in range(10):
             ox = x + random.randint(-3, 3)
             oy = y + random.randint(-3, 3)
             self.canvas.create_oval(ox - 5, oy - 5, ox + 5, oy + 5, fill=self.brush.colour, outline="", stipple="gray50", tags="drawing")
 
-    def _draw_shining(self, x: int, y: int) -> None:
+    def _draw_shining(self, x: int, y: int, hand_id:int) -> None:
         for i in range(8):
             ang = (2 * math.pi / 8) * i
             ex = x + 10 * math.cos(ang)
@@ -327,10 +354,13 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.create_line(x, y, ex, ey, fill=self.brush.colour, tags="drawing")
         self.canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill=self.brush.colour, outline="", tags="drawing")
 
-    def _draw_eraser(self, x: int, y: int) -> None:
-        if self.prev_coord:
+    def _draw_eraser(self, x: int, y: int, hand_id:int) -> None:
+        prev = self.prev_coords.get(hand_id)
+        if prev:
             bg = self.canvas["bg"]
-            self.canvas.create_line(*self.prev_coord, x, y, width=self.eraser_width, fill=bg, tags="drawing")
+            self.canvas.create_line(*prev, x, y, width=self.eraser_width,
+                                    fill=bg, tags="drawing")
+    
 
     # --------------------------- shape previews ---------------------------
     def _update_square_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
