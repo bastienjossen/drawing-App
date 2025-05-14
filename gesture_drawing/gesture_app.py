@@ -3,6 +3,9 @@
 """Main application that combines hand tracking, voice and drawing."""
 from __future__ import annotations
 
+from .drawing import DrawingApp
+from .network import NetworkClient
+
 import math
 import random
 import time
@@ -49,6 +52,18 @@ class GestureDrawingApp(DrawingApp):
     # ------------------------------ life‑cycle ------------------------------
     def __init__(self, master: tk.Tk | tk.Toplevel) -> None:  # noqa: D401
         super().__init__(master)
+
+        self.net = NetworkClient(self)
+
+        # wrap the draw_line helper so it also emits:
+        orig = self.draw_line
+        def hooked(x1, y1, x2, y2, *, colour="black", width=2):
+            orig(x1, y1, x2, y2, colour=colour, width=width)
+            # send to others
+            self.net.emit_draw(x1, y1, x2, y2, colour, width)
+        self.draw_line = hooked
+
+        
         master.title("Gesture Drawing Application")
 
         # --- camera & MediaPipe setup --------------------------------------
