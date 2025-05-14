@@ -1,10 +1,8 @@
-# gesture_app.py
-
 """Main application that combines hand tracking, voice and drawing."""
 from __future__ import annotations
 
-from .drawing import DrawingApp
-from .network import NetworkClient
+from . import network
+from queue import Queue
 
 import math
 import random
@@ -50,20 +48,13 @@ class GestureDrawingApp(DrawingApp):
     """Tkinter window driven by hand‑gestures and voice commands."""
 
     # ------------------------------ life‑cycle ------------------------------
-    def __init__(self, master: tk.Tk | tk.Toplevel) -> None:  # noqa: D401
+    def __init__(self, master: tk.Tk | tk.Toplevel) -> None:
         super().__init__(master)
 
-        self.net = NetworkClient(self)
+        # start network client (point to your server)
+        network.start_client("ws://<SERVER_IP>:6789")
+        self.master.after(20, self._poll_network)
 
-        # wrap the draw_line helper so it also emits:
-        orig = self.draw_line
-        def hooked(x1, y1, x2, y2, *, colour="black", width=2):
-            orig(x1, y1, x2, y2, colour=colour, width=width)
-            # send to others
-            self.net.emit_draw(x1, y1, x2, y2, colour, width)
-        self.draw_line = hooked
-
-        
         master.title("Gesture Drawing Application")
 
         # --- camera & MediaPipe setup --------------------------------------
@@ -280,7 +271,18 @@ class GestureDrawingApp(DrawingApp):
     # -- individual brush implementations ---------------------------------
     def _draw_solid(self, x: int, y: int) -> None:
         if self.prev_coord:
-            self.canvas.create_line(*self.prev_coord, x, y, width=3, fill=self.brush.colour, tags="drawing")
+            # local draw
+            self.canvas.create_line(*self.prev_coord, x, y,
+                                    width=3,
+                                    fill=self.brush.colour,
+                                    tags="drawing")
+            # broadcast to peers
+            network.broadcast_event({
+                "type": "line",
+                "coords": [*self.prev_coord, x, y],
+                "colour": self.brush.colour,
+                "width": 3,
+            })
 
     def _draw_air(self, x: int, y: int) -> None:
         for _ in range(20):
@@ -288,13 +290,27 @@ class GestureDrawingApp(DrawingApp):
             radius = random.uniform(0, 10)
             ox = int(x + math.cos(angle) * radius)
             oy = int(y + math.sin(angle) * radius)
-            self.canvas.create_oval(ox, oy, ox + 3, oy + 3, fill=self.brush.colour, tags="drawing")
+            self.canvas.create_oval(ox, oy, ox + 3, oy + 3,
+                                    fill=self.brush.colour,
+                                    tags="drawing")
+            network.broadcast_event({
+                "type": "air",
+                "coords": [ox, oy, ox+3, oy+3],
+                "colour": self.brush.colour,
+            })
 
     def _draw_texture(self, x: int, y: int) -> None:
-        # simple stippled effect – extend as needed
-        self.canvas.create_text(x, y, text="✶", fill=self.brush.colour, font=("Arial", 10), tags="drawing")
+        self.canvas.create_text(x, y,
+                                text="✶",
+                                fill=self.brush.colour,
+                                font=("Arial", 10),
+                                tags="drawing")
+        network.broadcast_event({
+            "type": "texture",
+            "coords": [x, y],
+            "colour": self.brush.colour,
+        })
 
-    # --- calligraphy with dynamic width ----------------------------------
     def _draw_calligraphy(self, x: int, y: int) -> None:
         if not self.prev_coord:
             self.prev_coord = (x, y)
@@ -305,7 +321,7 @@ class GestureDrawingApp(DrawingApp):
         dx, dy = x - px, y - py
         if math.hypot(dx, dy) < 1:
             return
-        angle = math.atan2(dy, dx) + math.pi / 4  # 45° nib
+        angle = math.atan2(dy, dx) + math.pi / 4
         ox, oy = offset * math.cos(angle), offset * math.sin(angle)
         poly = (
             px - ox, py - oy,
@@ -313,7 +329,15 @@ class GestureDrawingApp(DrawingApp):
             x + ox, y + oy,
             x - ox, y - oy,
         )
-        self.canvas.create_polygon(*poly, fill=self.brush.colour, outline=self.brush.colour, tags="drawing")
+        self.canvas.create_polygon(*poly,
+                                   fill=self.brush.colour,
+                                   outline=self.brush.colour,
+                                   tags="drawing")
+        network.broadcast_event({
+            "type": "calligraphy",
+            "polygon": poly,
+            "colour": self.brush.colour,
+        })
         self.prev_coord = (x, y)
 
     def _calligraphy_width(self, curr: tuple[int, int]) -> float:
@@ -328,26 +352,54 @@ class GestureDrawingApp(DrawingApp):
         return max(self.min_calligraphy_width, self.max_calligraphy_width - speed * self.width_scaling)
 
     # ---------------------------------------------------------------------
+
     def _draw_blending(self, x: int, y: int) -> None:
         for _ in range(10):
             ox = x + random.randint(-3, 3)
             oy = y + random.randint(-3, 3)
-            self.canvas.create_oval(ox - 5, oy - 5, ox + 5, oy + 5, fill=self.brush.colour, outline="", stipple="gray50", tags="drawing")
+            self.canvas.create_oval(ox - 5, oy - 5, ox + 5, oy + 5,
+                                    fill=self.brush.colour,
+                                    outline="",
+                                    stipple="gray50",
+                                    tags="drawing")
+            network.broadcast_event({
+                "type": "blending",
+                "coords": [ox, oy],
+                "colour": self.brush.colour,
+            })
 
     def _draw_shining(self, x: int, y: int) -> None:
         for i in range(8):
             ang = (2 * math.pi / 8) * i
             ex = x + 10 * math.cos(ang)
             ey = y + 10 * math.sin(ang)
-            self.canvas.create_line(x, y, ex, ey, fill=self.brush.colour, tags="drawing")
-        self.canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill=self.brush.colour, outline="", tags="drawing")
+            self.canvas.create_line(x, y, ex, ey,
+                                    fill=self.brush.colour,
+                                    tags="drawing")
+        self.canvas.create_oval(x - 2, y - 2, x + 2, y + 2,
+                                fill=self.brush.colour,
+                                outline="",
+                                tags="drawing")
+        network.broadcast_event({
+            "type": "shining",
+            "center": [x, y],
+            "colour": self.brush.colour,
+        })
 
     def _draw_eraser(self, x: int, y: int) -> None:
         if self.prev_coord:
             bg = self.canvas["bg"]
-            self.canvas.create_line(*self.prev_coord, x, y, width=self.eraser_width, fill=bg, tags="drawing")
+            self.canvas.create_line(*self.prev_coord, x, y,
+                                    width=self.eraser_width,
+                                    fill=bg,
+                                    tags="drawing")
+            network.broadcast_event({
+                "type": "eraser",
+                "coords": [*self.prev_coord, x, y],
+                "width": self.eraser_width,
+            })
 
-    # --------------------------- shape previews ---------------------------
+        # --------------------------- shape previews ---------------------------
     def _update_square_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
         cx1, cy1 = self.to_canvas(x1, y1, frame_w=fw, frame_h=fh)
         cx2, cy2 = self.to_canvas(x2, y2, frame_w=fw, frame_h=fh)
@@ -397,3 +449,20 @@ class GestureDrawingApp(DrawingApp):
         if self.cap.isOpened():
             self.cap.release()
         cv2.destroyAllWindows()
+
+    # --------------------------- network polling ---------------------------
+    def _poll_network(self):
+        for ev in network.get_events():
+            self._apply_event(ev)
+        self.master.after(20, self._poll_network)
+
+    def _apply_event(self, ev: dict):
+        """Draw whatever your peer just sent."""
+        t = ev.get("type")
+        if t == "line":
+            x1,y1,x2,y2 = ev["coords"]
+            self.canvas.create_line(x1, y1, x2, y2,
+                                     fill=ev.get("colour", "black"),
+                                     width=ev.get("width", 2),
+                                     tags="drawing")
+        # extend handling for other types as needed

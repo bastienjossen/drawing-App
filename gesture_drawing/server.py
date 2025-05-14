@@ -1,23 +1,23 @@
 # server.py
-import socketio
-import eventlet
+import asyncio
+import websockets
 
-sio = socketio.Server(cors_allowed_origins="*")
-app = socketio.WSGIApp(sio)
+clients = set()
 
-@sio.event
-def connect(sid, environ):
-    print("→ Client connected:", sid)
+async def handler(ws, path):
+    clients.add(ws)
+    try:
+        async for msg in ws:
+            # broadcast to everyone else
+            for c in clients:
+                if c is not ws:
+                    await c.send(msg)
+    finally:
+        clients.remove(ws)
 
-@sio.event
-def draw_event(sid, data):
-    # forward to everyone except the sender
-    sio.emit("draw_event", data, skip_sid=sid)
-
-@sio.event
-def disconnect(sid):
-    print("← Client disconnected:", sid)
+async def main():
+    async with websockets.serve(handler, "0.0.0.0", 6789):
+        await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
-    print("Starting relay on http://0.0.0.0:5001")
-    eventlet.wsgi.server(eventlet.listen(("", 5001)), app)
+    asyncio.run(main())

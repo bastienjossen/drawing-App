@@ -1,20 +1,35 @@
 # network.py
-import socketio
+import asyncio, json, threading
+import websockets
+from queue import Queue
 
-class NetworkClient:
-    def __init__(self, app, server_url="http://localhost:5001"):
-        self.app = app
-        self.sio = socketio.Client()
-        self.sio.on("draw_event", self._on_draw_event)
-        self.sio.connect(server_url)
+_send_q = Queue()
+_recv_q = Queue()
 
-    def emit_draw(self, x1, y1, x2, y2, colour, width):
-        msg = dict(x1=x1, y1=y1, x2=x2, y2=y2,
-                   colour=colour, width=width)
-        self.sio.emit("draw_event", msg)
+async def _ws_loop(uri):
+    async with websockets.connect(uri) as ws:
+        async def _reader():
+            async for msg in ws:
+                _recv_q.put(json.loads(msg))
+        async def _writer():
+            loop = asyncio.get_event_loop()
+            while True:
+                data = await loop.run_in_executor(None, _send_q.get)
+                await ws.send(json.dumps(data))
+        await asyncio.gather(_reader(), _writer())
 
-    def _on_draw_event(self, data):
-        # schedule a draw back on the Tkinter thread
-        self.app.master.after(0, 
-            lambda: self.app.draw_line(**data)
-        )
+def start_client(uri: str):
+    t = threading.Thread(target=lambda: asyncio.run(_ws_loop(uri)), daemon=True)
+    t.start()
+
+def broadcast_event(data: dict):
+    _send_q.put(data)
+
+def get_events() -> list[dict]:
+    evs = []
+    while True:
+        try:
+            evs.append(_recv_q.get_nowait())
+        except:
+            break
+    return evs
