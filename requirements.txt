@@ -4,3 +4,5 @@ opencv-python
 mediapipe
 SpeechRecognition
 PyAudio
+requests
+websockets

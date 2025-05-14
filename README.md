@@ -87,3 +87,14 @@ gesture_drawing/
 requirements.txt           # Third‑party deps (MediaPipe, OpenCV‑Python, etc.)
 README.md                  # You’re reading it
 ```
+
+
+# To start remote:
+The host has to run python gesture_drawing/server.py to start the server.
+In the gesture_app the host has to set:
+* network.start_client("ws://localhost:6789")
+
+And the client has to set it to the ip4 adress of the host. This adress is found by running: **$ ipconfig getifaddr en0** on the host computer.<br>The client has to set 
+* network.start_client("ws://HOST-IP:6789")
+
+after running both programs it should sink as long as they are in the same network.

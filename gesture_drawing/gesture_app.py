@@ -52,7 +52,7 @@ class GestureDrawingApp(DrawingApp):
         super().__init__(master)
 
         # start network client (point to your server)
-        network.start_client("ws://<SERVER_IP>:6789")
+        network.start_client("ws://localhost:6789")
         self.master.after(20, self._poll_network)
 
         master.title("Gesture Drawing Application")
