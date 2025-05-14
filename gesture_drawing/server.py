@@ -2,16 +2,25 @@
 import asyncio
 import websockets
 
-clients = set()
+clients: set[websockets.WebSocketServerProtocol] = set()
 
 async def handler(ws, path):
     clients.add(ws)
     try:
         async for msg in ws:
-            # broadcast to everyone else
+            dead = set()
+            # broadcast to everyone else, but shield exceptions
             for c in clients:
-                if c is not ws:
+                if c is ws:
+                    continue
+                try:
                     await c.send(msg)
+                except Exception:
+                    # mark c as dead so we can remove it
+                    dead.add(c)
+            # clean up any dead connections
+            for d in dead:
+                clients.remove(d)
     finally:
         clients.remove(ws)
 
