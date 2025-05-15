@@ -431,13 +431,22 @@ class GestureDrawingApp(DrawingApp):
         })
 
     def _finalize_square(self) -> None:
-        if getattr(self, "square_preview", None):
-            self.canvas.itemconfig(self.square_preview, outline="black", fill="", width=5)
+        # only finalize if there's an active preview
+        if getattr(self, "square_preview", None) is not None:
+            # 1. pull the current corners
+            corners = self.canvas.coords(self.square_preview)  # [x1,y1, x2,y2, …]
+            # 2. broadcast before we destroy it
+            network.broadcast_event({
+                "type":    "square_finalize",
+                "corners": corners,
+            })
+            # 3. commit the look
+            self.canvas.itemconfig(self.square_preview,
+                                   outline="black",
+                                   fill="",
+                                   width=5)
+            # 4. clear our preview handle
             self.square_preview = None
-        network.broadcast_event({
-            "type":    "square_finalize",
-            "corners": list(self.canvas.coords(self.square_preview)),
-        })
 
     def _update_circle_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
         cx1, cy1 = self.to_canvas(x1, y1, frame_w=fw, frame_h=fh)
@@ -455,13 +464,22 @@ class GestureDrawingApp(DrawingApp):
         })
 
     def _finalize_circle(self) -> None:
-        if getattr(self, "circle_preview", None):
-            self.canvas.itemconfig(self.circle_preview, outline="black", fill="", width=5)
+        # only finalize if there's an active preview
+        if getattr(self, "circle_preview", None) is not None:
+            # 1. pull the bounding box
+            bbox = self.canvas.coords(self.circle_preview)  # [x1, y1, x2, y2]
+            # 2. broadcast before we destroy it
+            network.broadcast_event({
+                "type": "circle_finalize",
+                "bbox": bbox,
+            })
+            # 3. commit the look
+            self.canvas.itemconfig(self.circle_preview,
+                                   outline="black",
+                                   fill="",
+                                   width=5)
+            # 4. clear our preview handle
             self.circle_preview = None
-        network.broadcast_event({
-            "type":    "circle_finalize",
-            "bbox":    list(self.canvas.coords(self.circle_preview)),
-        })
 
     # --------------------------- misc helpers -----------------------------
     @staticmethod
