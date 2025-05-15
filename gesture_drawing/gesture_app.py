@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from . import network
 from queue import Queue
+import uuid
 
 import math
 import random
@@ -50,6 +51,9 @@ class GestureDrawingApp(DrawingApp):
     # ------------------------------ life‑cycle ------------------------------
     def __init__(self, master: tk.Tk | tk.Toplevel) -> None:
         super().__init__(master)
+
+        self.client_id = str(uuid.uuid4())
+        self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
         # start network client (point to your server)
         network.start_client("ws://localhost:6789")
@@ -254,6 +258,12 @@ class GestureDrawingApp(DrawingApp):
             self.pointer_id = self.canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="", tags="drawing")
         else:
             self.canvas.coords(self.pointer_id, cx - 5, cy - 5, cx + 5, cy + 5)
+        
+        network.broadcast_event({
+            "type":    "cursor",
+            "id":      self.client_id,
+            "coords":  [cx, cy],
+        })
 
         if self.drawing_enabled and finger_straight:
             draw_func = {
@@ -466,3 +476,19 @@ class GestureDrawingApp(DrawingApp):
                                      width=ev.get("width", 2),
                                      tags="drawing")
         # extend handling for other types as needed
+        if t == "cursor":
+            peer_id = ev["id"]
+            x, y   = ev["coords"]
+            # if we already have an oval for that peer, move it
+            if peer_id in self.remote_cursors:
+                self.canvas.coords(self.remote_cursors[peer_id],
+                    x-5, y-5, x+5, y+5
+                )
+            else:
+                # create a new small circle in a different color
+                oid = self.canvas.create_oval(
+                    x-5, y-5, x+5, y+5,
+                    fill="blue", outline="", tags="cursor"
+                )
+                self.remote_cursors[peer_id] = oid
+
