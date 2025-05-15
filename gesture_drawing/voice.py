@@ -12,7 +12,7 @@ import difflib
 import speech_recognition as sr
 
 # your routers:
-from .llm_router import normalise, normalise_brush
+from .llm_router import normalise, normalise_brush, normalise_place
 
 # ── GLOBAL FLAG ────────────────────────────────────────────────────────────────
 # When set, the normal listen_for_commands loop will sleep instead of
@@ -23,15 +23,12 @@ popup_active = threading.Event()
 CommandCallback = Callable[[str], None]
 
 def listen_for_commands(callback: CommandCallback) -> None:
-    """Continuously listen, normalise via local model, then dispatch,
-    but automatically pause while popup_active is set."""
     def _listener() -> None:
         recog = sr.Recognizer()
         with sr.Microphone() as src:
             recog.adjust_for_ambient_noise(src, duration=1)
             print("Listening for commands…")
             while True:
-                # If popup is active, sleep and skip recognition
                 if popup_active.is_set():
                     time.sleep(0.4)
                     continue
@@ -40,7 +37,16 @@ def listen_for_commands(callback: CommandCallback) -> None:
                     audio = recog.listen(src)
                     transcript = recog.recognize_google(audio).strip()
                     print(f"[Normal] Heard: {transcript!r}")
-                    cmd = normalise(transcript)
+
+                    # choose normaliser based on shape‐mode
+                    # assume callback has a back‐pointer to your app instance
+                    mode = getattr(callback.__self__, "square_drawing_enabled", False) \
+                        or getattr(callback.__self__, "circle_drawing_enabled", False)
+                    if mode:
+                        cmd = normalise_place(transcript)
+                    else:
+                        cmd = normalise(transcript)
+
                     if cmd:
                         print(f"→ Normalised to: {cmd}")
                         callback(cmd)
@@ -48,7 +54,6 @@ def listen_for_commands(callback: CommandCallback) -> None:
                     print("Could not understand the audio – ignored.")
                 except sr.RequestError as exc:
                     print(f"Speech-API request error: {exc}")
-
     threading.Thread(target=_listener, daemon=True).start()
 
 
@@ -112,6 +117,7 @@ class BrushSelectionPopup:
                         self.on_select(brush)
                         self.top.destroy()
                         return
+                    else: print(f"[BrushPopup] Invalid brush: {brush}")
 
                     # invalid input → prompt retry
                     self.label.config(

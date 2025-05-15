@@ -42,6 +42,7 @@ When the user requests a brush change but does not name one, reply:
 
 When the user wants to put a square on the canvas, reply:
     SQUARE
+    
 When the user wants to put a circle on the canvas, reply:
     CIRCLE
     
@@ -65,56 +66,60 @@ HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
 }
 
-@lru_cache(maxsize=1024)
-def normalise(text: str) -> Optional[str]:
+def _call_llm(system_prompt: str, user_text: str, max_tokens=15) -> Optional[str]:
     payload = {
-        # "model": "meta-llama/llama-4-scout-17b-16e-instruct",
         "model": "allam-2-7b",
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": text},
+            {"role": "system",  "content": system_prompt},
+            {"role": "user",    "content": user_text},
         ],
-        "max_tokens": 15,
+        "max_tokens": max_tokens,
         "temperature": 0.0,
         "stop": ["\n"],
     }
-
     try:
         resp = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         resp.raise_for_status()
-        reply = resp.json()["choices"][0]["message"]["content"].strip().upper()
-        return None if reply == "NO_COMMAND" else reply
+        return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"[llm_router] Error contacting LLM: {e}")
         return None
-    
+
+@lru_cache(maxsize=1024)
+def normalise(text: str) -> Optional[str]:
+    # your existing SYSTEM_PROMPT as before
+    reply = _call_llm(SYSTEM_PROMPT, text).upper()
+    return None if reply == "NO_COMMAND" else reply
+
+@lru_cache(maxsize=1024)
+def normalise_place(text: str) -> Optional[str]:
+    PLACE_PROMPT = """\
+    You are in shape‐preview mode (square or circle). The user is sizing a shape on the canvas.
+    If the message is unrelated or not a command to place the shape, reply with NOTHING.
+    If you detect any attempt of finishing the placement of the shape, reply with:
+        PLACE
+    If the user tells you to put it somewhere (eg. "right there", "there"), reply with:
+        PLACE
+    Do not explain or comment."""
+    reply = _call_llm(PLACE_PROMPT, text)
+    if not reply:
+        return None
+    return reply.strip().upper()
+
+@lru_cache(maxsize=1024)
 def normalise_brush(text: str) -> Optional[str]:
     BRUSH_PROMPT = """\
     You are a voice command parser in brush-selection mode.
-    If the message is unrelated or there is no Brush type specified, reply with NOTHING.
+    If there is no Brush type specified, reply with NOTHING.
 
-    VALID BRUSH TYPES:
-    solid, air, texture, calligraphy, blending, shining
+    If there is a Brush type specified, reply with the exact name of the brush type.
+
+    Brush types include:
+    solid, air (are), texture, calligraphy, blending, shining
 
     Do not explain or comment.
     """
-
-    payload = {
-        "model": "allam-2-7b",
-        "messages": [
-            {"role": "system", "content": BRUSH_PROMPT},
-            {"role": "user", "content": f"Input: {text.strip()}\nBrush:"},
-        ],
-        "max_tokens": 15,
-        "temperature": 0.0,
-        "stop": ["\n"]
-    }
-
-    try:
-        resp = requests.post(API_URL, headers=HEADERS, json=payload, timeout=5)
-        resp.raise_for_status()
-        reply = resp.json()["choices"][0]["message"]["content"].strip().lower()
-        return reply if reply != "NOTHING" else None
-    except Exception as e:
-        print(f"[llm_router] Error in brush parser: {e}")
+    reply = _call_llm(BRUSH_PROMPT, text)
+    if not reply or reply.strip().lower() == "nothing":
         return None
+    return reply.strip().lower()

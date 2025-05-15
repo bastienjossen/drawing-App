@@ -161,6 +161,15 @@ class GestureDrawingApp(DrawingApp):
             )
             BrushSelectionPopup(self.master, self._change_brush_kind)
             return
+        
+        if cmd == "PLACE":
+            if self.square_drawing_enabled:
+                # this will call _finalize_square internally
+                self._toggle_shape("square")
+            elif self.circle_drawing_enabled:
+                # this will call _finalize_circle internally
+                self._toggle_shape("circle")
+            return
 
         if cmd == "SQUARE":
             self._toggle_shape("square")
