@@ -22,6 +22,8 @@ popup_active = threading.Event()
 # ── GENERAL LISTENER ───────────────────────────────────────────────────────────
 CommandCallback = Callable[[str], None]
 
+USE_LLM = False  # set this in your main.py 
+
 def listen_for_commands(callback: CommandCallback) -> None:
     def _listener() -> None:
         recog = sr.Recognizer()
@@ -34,26 +36,43 @@ def listen_for_commands(callback: CommandCallback) -> None:
                     continue
 
                 try:
-                    audio = recog.listen(src)
+                    audio      = recog.listen(src)
                     transcript = recog.recognize_google(audio).strip()
                     print(f"[Normal] Heard: {transcript!r}")
-
-                    # choose normaliser based on shape‐mode
-                    # assume callback has a back‐pointer to your app instance
-                    mode = getattr(callback.__self__, "square_drawing_enabled", False) \
-                        or getattr(callback.__self__, "circle_drawing_enabled", False)
-                    if mode:
-                        cmd = normalise_place(transcript)
-                    else:
-                        cmd = normalise(transcript)
-
-                    if cmd:
-                        print(f"→ Normalised to: {cmd}")
-                        callback(cmd)
                 except sr.UnknownValueError:
-                    print("Could not understand the audio – ignored.")
+                    continue
                 except sr.RequestError as exc:
                     print(f"Speech-API request error: {exc}")
+                    continue
+
+                cmd = None
+                if USE_LLM:
+                    # shape‐preview uses special “PLACE” parser
+                    in_shape = (
+                        getattr(callback.__self__, "square_drawing_enabled", False)
+                        or getattr(callback.__self__, "circle_drawing_enabled", False)
+                    )
+                    cmd = normalise_place(transcript) if in_shape else normalise(transcript)
+                    if cmd:
+                        print(f"→ Normalised to: {cmd}")
+                else:
+                    # exact‐match fallback
+                    cand = transcript.strip().upper()
+                    VALID = {
+                        "START","STOP","SQUARE","CIRCLE",
+                        "ERASER","BRUSH", "SQUARE","CIRCLE","PLACE"
+                    }
+                    if (
+                        cand in VALID
+                        or cand.startswith("CHANGE BRUSH TO ")
+                        or cand.startswith("CHANGE COLOR TO ")
+                        or cand.startswith("MY GUESS IS ")
+                    ):
+                        cmd = cand
+                        print(f"→ Exact match: {cmd}")
+
+                if cmd:
+                    callback(cmd)
     threading.Thread(target=_listener, daemon=True).start()
 
 
