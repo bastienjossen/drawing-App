@@ -425,11 +425,19 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.coords(self.square_preview, *corners)
         else:
             self.square_preview = self.canvas.create_polygon(*corners, outline="red", fill="", width=5, tags="drawing")
+        network.broadcast_event({
+            "type":    "square_preview",
+            "corners": corners,
+        })
 
     def _finalize_square(self) -> None:
         if getattr(self, "square_preview", None):
             self.canvas.itemconfig(self.square_preview, outline="black", fill="", width=5)
             self.square_preview = None
+        network.broadcast_event({
+            "type":    "square_finalize",
+            "corners": list(self.canvas.coords(self.square_preview)),
+        })
 
     def _update_circle_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
         cx1, cy1 = self.to_canvas(x1, y1, frame_w=fw, frame_h=fh)
@@ -441,11 +449,19 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.coords(self.circle_preview, *bbox)
         else:
             self.circle_preview = self.canvas.create_oval(*bbox, outline="red", fill="", width=5, tags="drawing")
+        network.broadcast_event({
+            "type":    "circle_preview",
+            "bbox":    bbox,
+        })
 
     def _finalize_circle(self) -> None:
         if getattr(self, "circle_preview", None):
             self.canvas.itemconfig(self.circle_preview, outline="black", fill="", width=5)
             self.circle_preview = None
+        network.broadcast_event({
+            "type":    "circle_finalize",
+            "bbox":    list(self.canvas.coords(self.circle_preview)),
+        })
 
     # --------------------------- misc helpers -----------------------------
     @staticmethod
@@ -476,6 +492,97 @@ class GestureDrawingApp(DrawingApp):
                                      width=ev.get("width", 2),
                                      tags="drawing")
         # extend handling for other types as needed
+        elif t == "air":
+            x1,y1,x2,y2 = ev["coords"]
+            self.canvas.create_oval(x1,y1,x2,y2,
+                                    fill=ev["colour"],
+                                    tags="drawing")
+
+        elif t == "texture":
+            x,y = ev["coords"]
+            self.canvas.create_text(x, y, text="✶",
+                                    fill=ev["colour"],
+                                    font=("Arial",10),
+                                    tags="drawing")
+
+        elif t == "calligraphy":
+            poly = ev["polygon"]
+            self.canvas.create_polygon(*poly,
+                                    fill=ev["colour"],
+                                    outline=ev["colour"],
+                                    tags="drawing")
+
+        elif t == "blending":
+            x,y = ev["coords"]
+            self.canvas.create_oval(x-5, y-5, x+5, y+5,
+                                    fill=ev["colour"],
+                                    stipple="gray50",
+                                    tags="drawing")
+
+        elif t == "shining":
+            x,y = ev["center"]
+            for i in range(8):
+                ang = (2 * math.pi / 8) * i
+                ex = x + 10 * math.cos(ang)
+                ey = y + 10 * math.sin(ang)
+                self.canvas.create_line(x, y, ex, ey,
+                                        fill=ev["colour"],
+                                        tags="drawing")
+            self.canvas.create_oval(x-2, y-2, x+2, y+2,
+                                    fill=ev["colour"],
+                                    tags="drawing")
+
+        elif t == "eraser":
+            x1,y1,x2,y2 = ev["coords"]
+            bg = self.canvas["bg"]
+            self.canvas.create_line(x1, y1, x2, y2,
+                                    width=ev["width"],
+                                    fill=bg,
+                                    tags="drawing")
+
+        elif t == "square_preview":
+            corners = ev["corners"]
+            if hasattr(self, "remote_sqprev"):
+                self.canvas.coords(self.remote_sqprev, *corners)
+            else:
+                self.remote_sqprev = self.canvas.create_polygon(*corners,
+                                                            outline="red",
+                                                            fill="",
+                                                            width=5,
+                                                            tags="drawing")
+
+        elif t == "square_finalize":
+            corners = ev["corners"]
+            # remove preview if you like:
+            if hasattr(self, "remote_sqprev"):
+                self.canvas.delete(self.remote_sqprev)
+            self.canvas.create_polygon(*corners,
+                                    outline="black",
+                                    fill="",
+                                    width=5,
+                                    tags="drawing")
+            
+        elif t == "circle_preview":
+            bbox = ev["bbox"]
+            if hasattr(self, "remote_circprev"):
+                self.canvas.coords(self.remote_circprev, *bbox)
+            else:
+                self.remote_circprev = self.canvas.create_oval(*bbox,
+                                                            outline="red",
+                                                            fill="",
+                                                            width=5,
+                                                            tags="drawing")
+        elif t == "circle_finalize":
+            bbox = ev["bbox"]
+            # remove preview if you like:
+            if hasattr(self, "remote_circprev"):
+                self.canvas.delete(self.remote_circprev)
+            self.canvas.create_oval(*bbox,
+                                    outline="black",
+                                    fill="",
+                                    width=5,
+                                    tags="drawing")
+        # handle cursor events
         if t == "cursor":
             peer_id = ev["id"]
             x, y   = ev["coords"]
