@@ -61,8 +61,8 @@ class GestureDrawingApp(DrawingApp):
 
         # --- drawing‑state --------------------------------------------------
         self.brush = Brush()
-        self.pointer_ids: dict[int, int] = {} 
-        self.prev_coords: dict[int, tuple[int,int]] = {}
+        self.pointer_ids: dict[int, int] = {}
+        self.prev_coords: dict[int, tuple[int, int]] = {}
         self.last_times: dict[int, float] = {}
         self.eraser_width = 20
         self.max_calligraphy_width = 25
@@ -73,6 +73,7 @@ class GestureDrawingApp(DrawingApp):
         self.drawing_enabled = False
         self.square_drawing_enabled = False
         self.circle_drawing_enabled = False
+        self.prompt_visible = True
 
         # --- game state ----------------------------------------------------
         self.current_prompt = random.choice(_PROMPTS)
@@ -95,10 +96,18 @@ class GestureDrawingApp(DrawingApp):
 
     # ------------------------------ UI helpers -----------------------------
     def _instruction_banner(self, *extra: str) -> str:
-        msg = [f"Draw: {self.current_prompt}"] + list(extra)
+        msg = list(extra)
         return "\n".join(msg)
 
     def _set_instruction(self, *lines: str) -> None:
+        self.canvas.itemconfig(self.instruction_text, text="\n".join(lines))
+
+    def _refresh_instruction(self, *extra_lines: str) -> None:
+        """Update the instruction text, optionally hiding the prompt line."""
+        lines = []
+        if self.prompt_visible:
+            lines.append(f"Draw: {self.current_prompt}")
+        lines.extend(extra_lines)
         self.canvas.itemconfig(self.instruction_text, text="\n".join(lines))
 
     # ------------------------------ command handling -----------------------
@@ -106,18 +115,27 @@ class GestureDrawingApp(DrawingApp):
         cmd = raw.upper()
         if cmd == "START":
             self.drawing_enabled = True
-            self._set_instruction(
+            self.prompt_visible = True
+            self._refresh_instruction(
                 self._instruction_banner(
                     "Say 'STOP' to stop drawing.",
                     "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
                     "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
                 )
             )
+            self.master.after(10000, lambda: (
+                setattr(self, "prompt_visible", False),
+                self._refresh_instruction(self._instruction_banner(
+                    "Say 'STOP' to stop drawing.",
+                    "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
+                    "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+                ))
+            ))
             return
         if cmd == "STOP":
             self.drawing_enabled = False
             self.square_drawing_enabled = self.circle_drawing_enabled = False
-            self._set_instruction(self._instruction_banner("Say 'START' to resume."))
+            self._refresh_instruction(self._instruction_banner("Say 'START' to resume."))
             return
 
         if cmd.startswith("CHANGE BRUSH TO "):
@@ -126,27 +144,27 @@ class GestureDrawingApp(DrawingApp):
                 self.brush.kind = BrushType(raw_type)  # type: ignore[arg-type]
             except ValueError:
                 print(f"Invalid brush type: {raw_type!r}")
-                self._set_instruction(self._instruction_banner(f"Invalid brush type: '{raw_type}'. Try again."))
+                self._refresh_instruction(self._instruction_banner(f"Invalid brush type: '{raw_type}'. Try again."))
             return
 
         if cmd.startswith("CHANGE COLOR TO "):
             self._change_colour(cmd.removeprefix("CHANGE COLOR TO ").strip().lower())
             return
-        
+
         if cmd == "ERASER":
             # Switch into eraser brush immediately
             self.brush.kind = BrushType.ERASER
             self.drawing_enabled = True
-            self._set_instruction(
+            self._refresh_instruction(
                 self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing.")
             )
             return
-    
+
         if cmd == "BRUSH":
             # Open the voice-driven brush selector popup
             from .voice import BrushSelectionPopup
-    
-            self._set_instruction(
+
+            self._refresh_instruction(
                 self._instruction_banner("Say the brush name…")
             )
             BrushSelectionPopup(self.master, self._change_brush_kind)
@@ -167,9 +185,10 @@ class GestureDrawingApp(DrawingApp):
         """Callback from BrushSelectionPopup with a valid brush name."""
         print(f"[Popup] Selected brush: {kind}")
         self.brush.kind = BrushType(kind)  # kind is already lowercase
-        self._set_instruction(
+        self._refresh_instruction(
             self._instruction_banner(f"Brush set to {kind}. Say 'STOP' to halt.")
         )
+
     # ---------------------------------------------------------------------
     def _toggle_shape(self, shape: str) -> None:  # square / circle
         attr = f"{shape}_drawing_enabled"
@@ -177,23 +196,24 @@ class GestureDrawingApp(DrawingApp):
         if not active:
             setattr(self, attr, True)
             self.drawing_enabled = False
-            self._set_instruction(
-                f"{shape.capitalize()} drawing mode ON. Move thumb/index to size.\nSay '{shape.upper()}' again to finalise."
+            self._refresh_instruction(
+                f"{shape.capitalize()} drawing mode ON. Move thumb/index to size.\nSay '{shape.upper()}' again to "
+                f"finalise."
             )
         else:
             setattr(self, attr, False)
             finalize = getattr(self, f"_finalize_{shape}")
             finalize()
-            self._set_instruction(f"{shape.capitalize()} finalised. Say '{shape.upper()}' to start anew.")
+            self._refresh_instruction(f"{shape.capitalize()} finalised. Say '{shape.upper()}' to start anew.")
 
     def _evaluate_guess(self, guess: str) -> None:
         if guess.lower() == self.current_prompt.lower():
-            self._set_instruction(f"✔ Correct! It *was* {self.current_prompt}. Picked a new one.")
+            self._refresh_instruction(f"✔ Correct! It *was* {self.current_prompt}. Say 'START' to begin new game.")
             self.canvas.delete("drawing")
             self.current_prompt = random.choice(_PROMPTS)
             self.drawing_enabled = False
         else:
-            self._set_instruction(f"✘ '{guess}' is wrong – keep trying!")
+            self._refresh_instruction(f"✘ '{guess}' is wrong – keep trying!")
 
     def _change_colour(self, colour: str) -> None:
         try:
@@ -221,12 +241,11 @@ class GestureDrawingApp(DrawingApp):
                 seen.add(idx)
                 self._handle_hand(hand, frame.shape, idx)
 
-        
         # clean‑up cursors/state for hands that disappeared
         for hid in set(self.pointer_ids) - seen:
             self.canvas.delete(self.pointer_ids.pop(hid))
             self.prev_coords.pop(hid, None)
-            self.last_times.pop(hid, None)             # add END
+            self.last_times.pop(hid, None)  # add END
         #----
 
         self.canvas.tag_raise(self.instruction_text)
@@ -235,7 +254,7 @@ class GestureDrawingApp(DrawingApp):
         cv2.waitKey(1)
         self.master.after(10, self._update_frame)
 
-    def _handle_hand(self, landmarks: Any, frame_shape: tuple[int, int, int], hand_id:int) -> None:
+    def _handle_hand(self, landmarks: Any, frame_shape: tuple[int, int, int], hand_id: int) -> None:
         self._mpdraw.draw_landmarks(self.frame, landmarks, self._mphands.HAND_CONNECTIONS)
         h, w, _ = frame_shape
         tip = landmarks.landmark[self._mphands.HandLandmark.INDEX_FINGER_TIP]
@@ -247,20 +266,20 @@ class GestureDrawingApp(DrawingApp):
             self._update_square_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)
         elif self.circle_drawing_enabled:
             thumb = landmarks.landmark[self._mphands.HandLandmark.THUMB_TIP]
-            self._update_circle_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)     
+            self._update_circle_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)
         else:
             self._move_pointer(x1, y1, w, h, finger_straight, hand_id)
 
     # ------------------------------ drawing primitives --------------------
-    def _move_pointer(self, x: int, y: int, frame_w: int, frame_h: int, finger_straight: bool, hand_id:int) -> None:
+    def _move_pointer(self, x: int, y: int, frame_w: int, frame_h: int, finger_straight: bool, hand_id: int) -> None:
         cx, cy = self.to_canvas(x, y, frame_w=frame_w, frame_h=frame_h)
 
         if hand_id not in self.pointer_ids:
             self.pointer_ids[hand_id] = self.canvas.create_oval(
-                cx-5, cy-5, cx+5, cy+5, fill="red", outline="", tags="drawing")
+                cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="", tags="drawing")
         else:
             self.canvas.coords(self.pointer_ids[hand_id],
-                               cx-5, cy-5, cx+5, cy+5)
+                               cx - 5, cy - 5, cx + 5, cy + 5)
 
         if self.drawing_enabled and finger_straight:
             draw_func = {
@@ -276,14 +295,14 @@ class GestureDrawingApp(DrawingApp):
         self.prev_coords[hand_id] = (cx, cy)
 
     # -- individual brush implementations ---------------------------------
-    def _draw_solid(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_solid(self, x: int, y: int, hand_id: int) -> None:
 
         prev = self.prev_coords.get(hand_id)
         if prev:
             self.canvas.create_line(*prev, x, y, width=3,
                                     fill=self.brush.colour, tags="drawing")
 
-    def _draw_air(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_air(self, x: int, y: int, hand_id: int) -> None:
 
         prev = self.prev_coords.get(hand_id)
         if not prev:
@@ -297,12 +316,12 @@ class GestureDrawingApp(DrawingApp):
             oy = int(y + math.sin(angle) * radius)
             self.canvas.create_oval(ox, oy, ox + 3, oy + 3, fill=self.brush.colour, tags="drawing")
 
-    def _draw_texture(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_texture(self, x: int, y: int, hand_id: int) -> None:
         # simple stippled effect – extend as needed
         self.canvas.create_text(x, y, text="✶", fill=self.brush.colour, font=("Arial", 10), tags="drawing")
 
     # --- calligraphy with dynamic width ----------------------------------
-    def _draw_calligraphy(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_calligraphy(self, x: int, y: int, hand_id: int) -> None:
 
         prev = self.prev_coords.get(hand_id)
         if not prev:
@@ -325,7 +344,7 @@ class GestureDrawingApp(DrawingApp):
         self.canvas.create_polygon(*poly, fill=self.brush.colour, outline=self.brush.colour, tags="drawing")
         self.prev_coords[hand_id] = (x, y)
 
-    def _calligraphy_width(self, curr: tuple[int, int], hand_id:int) -> float:
+    def _calligraphy_width(self, curr: tuple[int, int], hand_id: int) -> float:
 
         now = time.time()
         last = self.last_times.get(hand_id)
@@ -337,16 +356,17 @@ class GestureDrawingApp(DrawingApp):
         dist = math.hypot(curr[0] - prev[0], curr[1] - prev[1])
         self.last_times[hand_id] = now
         return max(self.min_calligraphy_width,
-                self.max_calligraphy_width - dist / dt * self.width_scaling)
+                   self.max_calligraphy_width - dist / dt * self.width_scaling)
 
     # ---------------------------------------------------------------------
-    def _draw_blending(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_blending(self, x: int, y: int, hand_id: int) -> None:
         for _ in range(10):
             ox = x + random.randint(-3, 3)
             oy = y + random.randint(-3, 3)
-            self.canvas.create_oval(ox - 5, oy - 5, ox + 5, oy + 5, fill=self.brush.colour, outline="", stipple="gray50", tags="drawing")
+            self.canvas.create_oval(ox - 5, oy - 5, ox + 5, oy + 5, fill=self.brush.colour, outline="",
+                                    stipple="gray50", tags="drawing")
 
-    def _draw_shining(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_shining(self, x: int, y: int, hand_id: int) -> None:
         for i in range(8):
             ang = (2 * math.pi / 8) * i
             ex = x + 10 * math.cos(ang)
@@ -354,13 +374,12 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.create_line(x, y, ex, ey, fill=self.brush.colour, tags="drawing")
         self.canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill=self.brush.colour, outline="", tags="drawing")
 
-    def _draw_eraser(self, x: int, y: int, hand_id:int) -> None:
+    def _draw_eraser(self, x: int, y: int, hand_id: int) -> None:
         prev = self.prev_coords.get(hand_id)
         if prev:
             bg = self.canvas["bg"]
             self.canvas.create_line(*prev, x, y, width=self.eraser_width,
                                     fill=bg, tags="drawing")
-    
 
     # --------------------------- shape previews ---------------------------
     def _update_square_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
