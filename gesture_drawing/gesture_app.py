@@ -17,6 +17,8 @@ import mediapipe as mp
 from .drawing import DrawingApp
 from .voice import listen_for_commands
 
+from PIL import Image, ImageFilter, ImageTk, ImageDraw
+
 __all__ = ["GestureDrawingApp"]
 
 
@@ -69,6 +71,13 @@ class GestureDrawingApp(DrawingApp):
         self.min_calligraphy_width = 5
         self.width_scaling = 1.0
 
+        w, h = self.canvas.winfo_reqwidth(), self.canvas.winfo_reqheight()
+        self._pil_image = Image.new("RGBA", (w, h), "white")
+        self._pil_draw = ImageDraw.Draw(self._pil_image)
+
+        # Hold a PhotoImage for display updates
+        self._tk_image = None
+
         # --- feature toggles ----------------------------------------------
         self.drawing_enabled = False
         self.square_drawing_enabled = False
@@ -94,6 +103,10 @@ class GestureDrawingApp(DrawingApp):
         # Kick‑off periodic update loop
         self._update_frame()
 
+        # Auto-smoothing
+        self.master.after(2000, self._periodic_smooth)
+        self.canvas.bind("<Configure>", self._on_resize)
+
     # ------------------------------ UI helpers -----------------------------
     def _instruction_banner(self, *extra: str) -> str:
         msg = list(extra)
@@ -109,6 +122,53 @@ class GestureDrawingApp(DrawingApp):
             lines.append(f"Draw: {self.current_prompt}")
         lines.extend(extra_lines)
         self.canvas.itemconfig(self.instruction_text, text="\n".join(lines))
+
+    def _draw_solid(self, x, y, hand_id):
+        prev = self.prev_coords.get(hand_id)
+        if prev:
+            # 1) Canvas
+            self.canvas.create_line(*prev, x, y, width=3,
+                                    fill=self.brush.colour, tags="drawing")
+            # 2) PIL
+            self._pil_draw.line([*prev, x, y],
+                                fill=self.brush.colour, width=3)
+
+    def _smooth_canvas(self, radius=2.0, passes=1):
+        # 1) Blur the off‑screen image
+        img = self._pil_image
+        for _ in range(passes):
+            img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+        self._pil_image = img
+        self._pil_draw = ImageDraw.Draw(self._pil_image)
+
+        # 2) Convert to PhotoImage
+        self._tk_image = ImageTk.PhotoImage(self._pil_image)
+
+        # 3) Replace only the background layer
+        self.canvas.delete("background")
+        self.canvas.create_image(
+            0, 0,
+            image=self._tk_image,
+            anchor="nw",
+            tags=("background",)
+        )
+        self.canvas.tag_lower("background")
+        self.canvas.tag_raise(self.instruction_text)
+
+    def _periodic_smooth(self) -> None:
+        # Only smooth when drawing is enabled — tweak as you like.
+        if self.drawing_enabled:
+            self._smooth_canvas(radius=1.0, passes=1)
+        # Schedule the next smooth in 2000 ms:
+        self.master.after(2000, self._periodic_smooth)
+
+    def _on_resize(self, event):
+        new_w, new_h = event.width, event.height
+        old = self._pil_image
+        img = Image.new("RGBA", (new_w, new_h), "white")
+        img.paste(old, (0, 0))
+        self._pil_image = img
+        self._pil_draw = ImageDraw.Draw(self._pil_image)
 
     # ------------------------------ command handling -----------------------
     def _handle_command(self, raw: str) -> None:
@@ -246,7 +306,7 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.delete(self.pointer_ids.pop(hid))
             self.prev_coords.pop(hid, None)
             self.last_times.pop(hid, None)  # add END
-        #----
+        # ----
 
         self.canvas.tag_raise(self.instruction_text)
 
