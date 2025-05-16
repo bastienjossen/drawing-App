@@ -39,10 +39,22 @@ class Brush:
 
 
 _PROMPTS: Sequence[str] = (
-    "Sun", "Tree", "House", "Car", "Cat", "Dog", "Boat", "Flower", "Cloud", "Star",
-    "Fish", "Heart", "Balloon", "Butterfly", "Ice Cream", "Cup", "Book", "Chair", "Cake", "Pencil",
-    "Apple", "Moon", "Rainbow", "Bird", "Key", "Umbrella", "Clock", "Camera", "Guitar", "Shoe",
+    "Dog",      
+    "Fish",     
+    "Bird",     
+    "House",        
+    "Star",     
+    "Heart",        
+    "Cloud",    
+    "Flower",   
+    "Apple",       
+    "Boat",     
+    "Cup",      
+    "Key",       
+    "Book",            
+    "Moon",      
 )
+
 
 
 class GestureDrawingApp(DrawingApp):
@@ -56,7 +68,7 @@ class GestureDrawingApp(DrawingApp):
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
         # start network client (point to your server)
-        network.start_client("ws://localhost:6789")
+        network.start_client("ws://172.20.10.6:6789")
         self.master.after(20, self._poll_network)
 
         master.title("Gesture Drawing Application")
@@ -621,7 +633,7 @@ class GestureDrawingApp(DrawingApp):
             # remote peer made a guess
             guess = ev["guess"]
             self._evaluate_guess(guess)
-            
+
         # handle cursor events
         if t == "cursor":
             peer_id = ev["id"]
