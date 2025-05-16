@@ -179,7 +179,14 @@ class GestureDrawingApp(DrawingApp):
             return
 
         if cmd.startswith("MY GUESS IS "):
-            self._evaluate_guess(cmd.removeprefix("MY GUESS IS ").strip())
+            guess = cmd.removeprefix("MY GUESS IS ").strip()
+            # 1) evaluate locally
+            self._evaluate_guess(guess)
+            # 2) broadcast to peers
+            network.broadcast_event({
+                "type":  "guess",
+                "guess": guess,
+            })
             return
 
     def _change_brush_kind(self, kind: str) -> None:
@@ -609,6 +616,12 @@ class GestureDrawingApp(DrawingApp):
                                     fill="",
                                     width=5,
                                     tags="drawing")
+            
+        elif t == "guess":
+            # remote peer made a guess
+            guess = ev["guess"]
+            self._evaluate_guess(guess)
+            
         # handle cursor events
         if t == "cursor":
             peer_id = ev["id"]
