@@ -9,6 +9,7 @@ import math
 import random
 import time
 import tkinter as tk
+from PIL import Image, ImageTk
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Iterable, Sequence
@@ -64,11 +65,24 @@ class GestureDrawingApp(DrawingApp):
     def __init__(self, master: tk.Tk | tk.Toplevel) -> None:
         super().__init__(master)
 
+        self.master = master
+
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
+        self.master.bind_all("<KeyPress-space>", self._on_space)
+        
+        # create a small video widget…
+        self.video_label = tk.Label(self.master, bd=2, relief="sunken")
+        # …and place it over the canvas at bottom-right
+        self.video_label.place(
+            relx=1.0, rely=1.0,           # relative to bottom-right of master
+            anchor="se",                  # align its south-east corner
+            width=288, height=162         # whatever small size you like
+        )
+
         # start network client (point to your server)
-        network.start_client("ws://172.20.10.6:6789")
+        network.start_client("ws://localhost:6789")
         self.master.after(20, self._poll_network)
 
         master.title("Gesture Drawing Application")
@@ -109,11 +123,24 @@ class GestureDrawingApp(DrawingApp):
             justify="center",
         )
 
+        self.master.focus_force()
+
         # Start asynchronous voice listener
         listen_for_commands(self._handle_command)
 
         # Kick‑off periodic update loop
         self._update_frame()
+
+    def _on_space(self, event: tk.Event) -> None:
+        # decide if we're starting or stopping
+        cmd = "START" if not self.drawing_enabled else "STOP"
+        # 1) locally apply it
+        self._handle_command(cmd)
+        # 2) broadcast it so peers pick it up too
+        network.broadcast_event({
+            "type":    "command",
+            "command": cmd,
+        })
 
     # ------------------------------ UI helpers -----------------------------
     def _instruction_banner(self, *extra: str) -> str:
@@ -245,22 +272,39 @@ class GestureDrawingApp(DrawingApp):
     def _update_frame(self) -> None:
         ok, frame = self.cap.read()
         if not ok:
-            self.master.after(10, self._update_frame)
             return
-
+        # flip so it’s a mirror view
         frame = cv2.flip(frame, 1)
-        self.frame = frame  # Store current frame for drawing landmarks
+        self.frame = frame
+
+        # 1) run Mediapipe on the flipped frame
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         result = self._hands.process(rgb)
 
+        # 2) if there's a hand, handle it (this will draw on the Tkinter canvas)
         if result.multi_hand_landmarks:
-            self._handle_hand(result.multi_hand_landmarks[0], frame.shape)
+            lm = result.multi_hand_landmarks[0]
+            self._handle_hand(lm, frame.shape)
 
-        self.canvas.tag_raise(self.instruction_text)
+        # 3) draw the landmark overlay on the frame itself for display
+        if result.multi_hand_landmarks:
+            for lm in result.multi_hand_landmarks:
+                self._mpdraw.draw_landmarks(frame, lm, self._mphands.HAND_CONNECTIONS)
 
-        cv2.imshow("Hand Gesture", frame)
-        cv2.waitKey(1)
+        # downscale the entire frame to fit your little preview box
+        small = cv2.resize(frame, (288, 162), interpolation=cv2.INTER_AREA)
+
+        # now convert to PhotoImage
+        disp = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(disp)
+        
+        imgtk = ImageTk.PhotoImage(image=img)
+        self.video_label.imgtk = imgtk
+        self.video_label.configure(image=imgtk)
+
+        # schedule next frame
         self.master.after(10, self._update_frame)
+
 
     def _handle_hand(self, landmarks: Any, frame_shape: tuple[int, int, int]) -> None:
         self._mpdraw.draw_landmarks(self.frame, landmarks, self._mphands.HAND_CONNECTIONS)
@@ -531,6 +575,12 @@ class GestureDrawingApp(DrawingApp):
     def _apply_event(self, ev: dict):
         """Draw whatever your peer just sent."""
         t = ev.get("type")
+
+        if t == "command":
+            # a peer hit space (or spoke START/STOP)
+            self._handle_command(ev["command"])
+            return
+
         if t == "line":
             x1,y1,x2,y2 = ev["coords"]
             self.canvas.create_line(x1, y1, x2, y2,
