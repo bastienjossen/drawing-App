@@ -71,6 +71,9 @@ class GestureDrawingApp(DrawingApp):
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
         self.master.bind_all("<KeyPress-space>", self._on_space)
+        self.master.bind("<ButtonPress-1>",   self._on_mouse_down)
+        self.master.bind("<B1-Motion>",      self._on_mouse_drag)
+        self.master.bind("<ButtonRelease-1>", self._on_mouse_up)
         
         # create a small video widget…
         self.video_label = tk.Label(self.master, bd=2, relief="sunken")
@@ -141,6 +144,32 @@ class GestureDrawingApp(DrawingApp):
             "type":    "command",
             "command": cmd,
         })
+
+    def _on_mouse_down(self, event: tk.Event) -> None:
+        # start a new “stroke”
+        self.last_x, self.last_y = event.x, event.y
+
+    def _on_mouse_drag(self, event: tk.Event) -> None:
+        # draw locally
+        x1, y1 = self.last_x, self.last_y
+        x2, y2 = event.x, event.y
+        self.canvas.create_line(x1, y1, x2, y2,
+                                fill=self.brush.colour,
+                                width=3,
+                                tags="drawing")
+        # broadcast to peers
+        network.broadcast_event({
+            "type":   "line",
+            "coords": [x1, y1, x2, y2],
+            "colour": self.brush.colour,
+            "width":  3,
+        })
+        # advance the stroke
+        self.last_x, self.last_y = x2, y2
+
+    def _on_mouse_up(self, _event: tk.Event) -> None:
+        # finish stroke
+        self.last_x = self.last_y = None
 
     # ------------------------------ UI helpers -----------------------------
     def _instruction_banner(self, *extra: str) -> str:
