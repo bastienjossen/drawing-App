@@ -639,10 +639,9 @@ class GestureDrawingApp(DrawingApp):
             return
         
         if t == "guess" and self.is_drawer:
-            # only the active drawer handles guesses
             if ev["guess"].lower() == self.current_prompt.lower():
-                # correct — new round with that guesser as drawer
-                self._start_new_round(drawer=ev["id"])
+                # host picks a new round and broadcasts
+                self._local_start_round()
             return
 
         if t == "command":
