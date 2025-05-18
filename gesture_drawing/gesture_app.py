@@ -200,7 +200,7 @@ class GestureDrawingApp(DrawingApp):
                 if not self.round_active:
                     self._local_start_round()
                     self.round_active = True
-                    
+
                 self.drawing_enabled = True
                 self._set_instruction(
                     self._instruction_banner(
@@ -395,6 +395,8 @@ class GestureDrawingApp(DrawingApp):
             "id":      self.client_id,
             "coords":  [cx, cy],
         })
+
+        self.canvas.tag_raise("pointer")
 
         if self.is_drawer and self.drawing_enabled and finger_straight:
             draw_func = {
@@ -641,8 +643,12 @@ class GestureDrawingApp(DrawingApp):
         
         if t == "guess" and self.is_drawer:
             if ev["guess"].lower() == self.current_prompt.lower():
+                print(f"------------   CONGRATULATIONS PEER {ev['id']}  ------------\nIT WAS '{self.current_prompt}'")
                 # host kicks off next round *with* the guesser as drawer
                 self._local_start_round(drawer_id=ev["id"])
+            else:
+                print(f"Peer {ev['id']} guessed '{ev['guess']}' – incorrect.")
+                self._evaluate_guess(ev["guess"])
             return
 
         if t == "command":
