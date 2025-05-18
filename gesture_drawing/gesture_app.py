@@ -204,9 +204,7 @@ class GestureDrawingApp(DrawingApp):
                     )
                 )
 
-                # broadcast to let everyone know a new round is underway
-                self._start_new_round(drawer=self.client_id,
-                                      prompt=self.current_prompt)
+                self._local_start_round()    # <-- instead of _start_new_round(...)
                 return
 
             if cmd == "STOP":
@@ -634,10 +632,9 @@ class GestureDrawingApp(DrawingApp):
         t = ev.get("type")
 
         if t == "start_round":
-            # sync exactly what the drawer told us
-            self._start_new_round(drawer=ev["drawer_id"],
-                                  prompt=ev["prompt"])
+            self._start_new_round(ev["drawer_id"], ev["prompt"])
             return
+        
         if t == "guess" and self.is_drawer:
             # only the active drawer handles guesses
             if ev["guess"].lower() == self.current_prompt.lower():
@@ -765,21 +762,28 @@ class GestureDrawingApp(DrawingApp):
                 )
                 self.remote_cursors[peer_id] = oid
 
-    def _start_new_round(self, drawer: str, prompt: str = None):
-        # if called by a correct‐guess swap, pick a new word:
-        self.current_prompt = prompt or random.choice(_PROMPTS)
-        self.current_drawer = drawer
-        self.is_drawer = (drawer == self.client_id)
+    def _start_new_round(self, drawer: str, prompt: str) -> None:
+        # ——————————————————————————————————————————————
+        # ONLY update *local* state and UI
+        self.current_drawer  = drawer
+        self.current_prompt  = prompt
+        self.is_drawer       = (drawer == self.client_id)
         self.canvas.delete("drawing")
-
-        # broadcast to everyone
-        network.broadcast_event({
-            "type":      "start_round",
-            "drawer_id": self.current_drawer,
-            "prompt":    self.current_prompt,
-        })
-
         if self.is_drawer:
             self._set_instruction(self._instruction_banner("Say 'START' to begin."))
         else:
             self._set_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
+        # ——————————————————————————————————————————————
+        # ✘ DO NOT broadcast from here any more!
+
+    def _local_start_round(self) -> None:
+        # When _this client_ decides to start a round:
+        word = random.choice(_PROMPTS)
+        # 1) update local UI
+        self._start_new_round(self.client_id, word)
+        # 2) broadcast exactly once
+        network.broadcast_event({
+            "type":      "start_round",
+            "drawer_id": self.client_id,
+            "prompt":    word,
+        })
