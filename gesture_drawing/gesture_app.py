@@ -73,6 +73,7 @@ class GestureDrawingApp(DrawingApp):
         self.current_drawer: str   = self.client_id   # I start as drawer
         self.is_drawer:     bool   = True
         self.current_prompt: str   = random.choice(_PROMPTS)
+        self.round_active = False
 
         self.master.bind_all("<KeyPress-space>", self._on_space)
         self.master.bind("<ButtonPress-1>",   self._on_mouse_down)
@@ -195,6 +196,9 @@ class GestureDrawingApp(DrawingApp):
         cmd = raw.upper()
         if self.is_drawer:
             if cmd == "START":
+                if not self.round_active:
+                    self._local_start_round()
+                    self.round_active = True
                 self.drawing_enabled = True
                 self._set_instruction(
                     self._instruction_banner(
@@ -202,15 +206,14 @@ class GestureDrawingApp(DrawingApp):
                         "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
                         "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
                     )
-                )
-
-                self._local_start_round()    # <-- instead of _start_new_round(...)
+                ) 
                 return
 
             if cmd == "STOP":
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
                 self._set_instruction(self._instruction_banner("Say 'START' to resume."))
+                network.broadcast_event({"type":"command","command":"STOP"})
                 return
 
             if cmd.startswith("CHANGE BRUSH TO "):
@@ -382,7 +385,7 @@ class GestureDrawingApp(DrawingApp):
         cx, cy = self.to_canvas(x, y, frame_w=frame_w, frame_h=frame_h)
 
         if self.pointer_id is None:
-            self.pointer_id = self.canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="", tags="drawing")
+            self.pointer_id = self.canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="", tags="pointer")
         else:
             self.canvas.coords(self.pointer_id, cx - 5, cy - 5, cx + 5, cy + 5)
         
