@@ -196,9 +196,7 @@ class GestureDrawingApp(DrawingApp):
         cmd = raw.upper()
         if self.is_drawer:
             if cmd == "START":
-                if not self.round_active:
-                    self._local_start_round()
-                    self.round_active = True
+                # no round_active check any more
                 self.drawing_enabled = True
                 self._set_instruction(
                     self._instruction_banner(
@@ -206,14 +204,12 @@ class GestureDrawingApp(DrawingApp):
                         "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
                         "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
                     )
-                ) 
+                )
                 return
-
             if cmd == "STOP":
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
                 self._set_instruction(self._instruction_banner("Say 'START' to resume."))
-                network.broadcast_event({"type":"command","command":"STOP"})
                 return
 
             if cmd.startswith("CHANGE BRUSH TO "):
@@ -640,8 +636,8 @@ class GestureDrawingApp(DrawingApp):
         
         if t == "guess" and self.is_drawer:
             if ev["guess"].lower() == self.current_prompt.lower():
-                # host picks a new round and broadcasts
-                self._local_start_round()
+                # host kicks off next round *with* the guesser as drawer
+                self._local_start_round(drawer_id=ev["id"])
             return
 
         if t == "command":
@@ -764,28 +760,29 @@ class GestureDrawingApp(DrawingApp):
                 )
                 self.remote_cursors[peer_id] = oid
 
-    def _start_new_round(self, drawer: str, prompt: str) -> None:
-        # ——————————————————————————————————————————————
-        # ONLY update *local* state and UI
-        self.current_drawer  = drawer
-        self.current_prompt  = prompt
+                
+    def _start_new_round(self, drawer: str, prompt: str):
+        self.current_drawer = drawer
+        self.current_prompt = prompt
         self.is_drawer       = (drawer == self.client_id)
         self.canvas.delete("drawing")
         if self.is_drawer:
             self._set_instruction(self._instruction_banner("Say 'START' to begin."))
         else:
             self._set_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
-        # ——————————————————————————————————————————————
-        # ✘ DO NOT broadcast from here any more!
 
-    def _local_start_round(self) -> None:
-        # When _this client_ decides to start a round:
+    def _local_start_round(self, drawer_id: str = None):
+        # pick a word
         word = random.choice(_PROMPTS)
-        # 1) update local UI
-        self._start_new_round(self.client_id, word)
-        # 2) broadcast exactly once
+        drawer = drawer_id or self.client_id
+
+        # update UI + state locally
+        self._start_new_round(drawer, word)
+        self.round_active = True
+
+        # broadcast exactly once
         network.broadcast_event({
             "type":      "start_round",
-            "drawer_id": self.client_id,
+            "drawer_id": drawer,
             "prompt":    word,
         })
