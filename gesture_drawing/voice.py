@@ -52,7 +52,7 @@ def listen_for_commands(callback: CommandCallback) -> None:
                         getattr(callback.__self__, "square_drawing_enabled", False)
                         or getattr(callback.__self__, "circle_drawing_enabled", False)
                     )
-                    in_guess_mode = not getattr(callback.__self__, "is_drawer", True)
+                    in_guess_mode = not getattr(callback.__self__, "is_drawer", False)
                     if in_guess_mode:
                         # guess mode uses the normal LLM
                         cmd = normalise_guess(transcript)
