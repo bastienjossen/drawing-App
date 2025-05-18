@@ -123,3 +123,23 @@ def normalise_brush(text: str) -> Optional[str]:
     if not reply or reply.strip().lower() == "nothing":
         return None
     return reply.strip().lower()
+
+@lru_cache(maxsize=1024)
+def normalise_guess(text: str) -> Optional[str]:
+    GUESS_PROMPT = """\
+    You are a voice‐guess parser in a Pictionary game.
+    When the user speaks a word or phrase intended as their guess for the current drawing,
+    you must find the single word the user is guessing and reply with exactly:
+
+    MY GUESS IS <word>
+
+    replacing `<word>` with exactly what they said (do not translate or paraphrase).
+    If the utterance is not a guess, reply with:
+
+    NOTHING
+
+    Do not explain or comment."""
+    reply = _call_llm(GUESS_PROMPT, text)
+    if not reply or reply.strip().lower() == "nothing":
+        return None
+    return reply.strip().lower()

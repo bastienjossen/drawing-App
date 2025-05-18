@@ -12,7 +12,7 @@ import difflib
 import speech_recognition as sr
 
 # your routers:
-from .llm_router import normalise, normalise_brush, normalise_place
+from .llm_router import normalise, normalise_brush, normalise_place, normalise_guess
 
 # ── GLOBAL FLAG ────────────────────────────────────────────────────────────────
 # When set, the normal listen_for_commands loop will sleep instead of
@@ -52,7 +52,12 @@ def listen_for_commands(callback: CommandCallback) -> None:
                         getattr(callback.__self__, "square_drawing_enabled", False)
                         or getattr(callback.__self__, "circle_drawing_enabled", False)
                     )
-                    cmd = normalise_place(transcript) if in_shape else normalise(transcript)
+                    in_guess_mode = not getattr(callback.__self__, "is_drawer", True)
+                    if in_guess_mode:
+                        # guess mode uses the normal LLM
+                        cmd = normalise_guess(transcript)
+                    else:
+                        cmd = normalise_place(transcript) if in_shape else normalise(transcript)
                     if cmd:
                         print(f"→ Normalised to: {cmd}")
                 else:
