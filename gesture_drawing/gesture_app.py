@@ -70,6 +70,10 @@ class GestureDrawingApp(DrawingApp):
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
+        self.current_drawer: str   = self.client_id   # I start as drawer
+        self.is_drawer:     bool   = True
+        self.current_prompt: str   = random.choice(_PROMPTS)
+
         self.master.bind_all("<KeyPress-space>", self._on_space)
         self.master.bind("<ButtonPress-1>",   self._on_mouse_down)
         self.master.bind("<B1-Motion>",      self._on_mouse_drag)
@@ -114,7 +118,6 @@ class GestureDrawingApp(DrawingApp):
         self.circle_drawing_enabled = False
 
         # --- game state ----------------------------------------------------
-        self.current_prompt = random.choice(_PROMPTS)
 
         self.instruction_text = self.canvas.create_text(
             self.master.winfo_width() * 5 // 3,
@@ -136,6 +139,8 @@ class GestureDrawingApp(DrawingApp):
 
     def _on_space(self, event: tk.Event) -> None:
         # decide if we're starting or stopping
+        if not self.is_drawer:
+            return
         cmd = "START" if not self.drawing_enabled else "STOP"
         # 1) locally apply it
         self._handle_command(cmd)
@@ -146,10 +151,14 @@ class GestureDrawingApp(DrawingApp):
         })
 
     def _on_mouse_down(self, event: tk.Event) -> None:
+        if not self.is_drawer:
+            return
         # start a new “stroke”
         self.last_x, self.last_y = event.x, event.y
 
     def _on_mouse_drag(self, event: tk.Event) -> None:
+        if not self.is_drawer:
+            return
         # draw locally
         x1, y1 = self.last_x, self.last_y
         x2, y2 = event.x, event.y
@@ -168,6 +177,8 @@ class GestureDrawingApp(DrawingApp):
         self.last_x, self.last_y = x2, y2
 
     def _on_mouse_up(self, _event: tk.Event) -> None:
+        if not self.is_drawer:
+            return
         # finish stroke
         self.last_x = self.last_y = None
 
@@ -182,80 +193,97 @@ class GestureDrawingApp(DrawingApp):
     # ------------------------------ command handling -----------------------
     def _handle_command(self, raw: str) -> None:
         cmd = raw.upper()
-        if cmd == "START":
-            self.drawing_enabled = True
-            self._set_instruction(
-                self._instruction_banner(
-                    "Say 'STOP' to stop drawing.",
-                    "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
-                    "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+        if self.is_drawer:
+            if cmd == "START":
+                self.drawing_enabled = True
+                self._set_instruction(
+                    self._instruction_banner(
+                        "Say 'STOP' to stop drawing.",
+                        "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
+                        "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+                    )
                 )
-            )
-            return
-        if cmd == "STOP":
-            self.drawing_enabled = False
-            self.square_drawing_enabled = self.circle_drawing_enabled = False
-            self._set_instruction(self._instruction_banner("Say 'START' to resume."))
-            return
 
-        if cmd.startswith("CHANGE BRUSH TO "):
-            raw_type = cmd.removeprefix("CHANGE BRUSH TO ").strip().lower()
-            try:
-                self.brush.kind = BrushType(raw_type)  # type: ignore[arg-type]
-            except ValueError:
-                print(f"Invalid brush type: {raw_type!r}")
-                self._set_instruction(self._instruction_banner(f"Invalid brush type: '{raw_type}'. Try again."))
-            return
+                # broadcast to let everyone know a new round is underway
+                self._start_new_round(drawer=self.client_id,
+                                      prompt=self.current_prompt)
+                return
 
-        if cmd.startswith("CHANGE COLOR TO "):
-            self._change_colour(cmd.removeprefix("CHANGE COLOR TO ").strip().lower())
-            return
+            if cmd == "STOP":
+                self.drawing_enabled = False
+                self.square_drawing_enabled = self.circle_drawing_enabled = False
+                self._set_instruction(self._instruction_banner("Say 'START' to resume."))
+                return
+
+            if cmd.startswith("CHANGE BRUSH TO "):
+                raw_type = cmd.removeprefix("CHANGE BRUSH TO ").strip().lower()
+                try:
+                    self.brush.kind = BrushType(raw_type)  # type: ignore[arg-type]
+                except ValueError:
+                    print(f"Invalid brush type: {raw_type!r}")
+                    self._set_instruction(self._instruction_banner(f"Invalid brush type: '{raw_type}'. Try again."))
+                return
+
+            if cmd.startswith("CHANGE COLOR TO "):
+                self._change_colour(cmd.removeprefix("CHANGE COLOR TO ").strip().lower())
+                return
+            
+            if cmd == "ERASER":
+                # Switch into eraser brush immediately
+                self.brush.kind = BrushType.ERASER
+                self.drawing_enabled = True
+                self._set_instruction(
+                    self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing.")
+                )
+                return
         
-        if cmd == "ERASER":
-            # Switch into eraser brush immediately
-            self.brush.kind = BrushType.ERASER
-            self.drawing_enabled = True
-            self._set_instruction(
-                self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing.")
-            )
-            return
-    
-        if cmd == "BRUSH":
-            # Open the voice-driven brush selector popup
-            from .voice import BrushSelectionPopup
-    
-            self._set_instruction(
-                self._instruction_banner("Say the brush name…")
-            )
-            BrushSelectionPopup(self.master, self._change_brush_kind)
-            return
+            if cmd == "BRUSH":
+                # Open the voice-driven brush selector popup
+                from .voice import BrushSelectionPopup
         
-        if cmd == "PLACE":
-            if self.square_drawing_enabled:
-                # this will call _finalize_square internally
+                self._set_instruction(
+                    self._instruction_banner("Say the brush name…")
+                )
+                BrushSelectionPopup(self.master, self._change_brush_kind)
+                return
+            
+            if cmd == "PLACE":
+                if self.square_drawing_enabled:
+                    # this will call _finalize_square internally
+                    self._toggle_shape("square")
+                elif self.circle_drawing_enabled:
+                    # this will call _finalize_circle internally
+                    self._toggle_shape("circle")
+                return
+
+            if cmd == "SQUARE":
                 self._toggle_shape("square")
-            elif self.circle_drawing_enabled:
-                # this will call _finalize_circle internally
+                return
+            if cmd == "CIRCLE":
                 self._toggle_shape("circle")
-            return
-
-        if cmd == "SQUARE":
-            self._toggle_shape("square")
-            return
-        if cmd == "CIRCLE":
-            self._toggle_shape("circle")
-            return
-
-        if cmd.startswith("MY GUESS IS "):
-            guess = cmd.removeprefix("MY GUESS IS ").strip()
-            # 1) evaluate locally
-            self._evaluate_guess(guess)
-            # 2) broadcast to peers
-            network.broadcast_event({
-                "type":  "guess",
-                "guess": guess,
-            })
-            return
+                return
+        else:
+            if cmd.startswith("MY GUESS IS "):
+                guess = cmd.removeprefix("MY GUESS IS ").strip()
+                network.broadcast_event({
+                    "type":  "guess",
+                    "id":    self.client_id,
+                    "guess": guess,
+                })
+                return
+            
+    def _send_guess(self, guess: str):
+        # evaluate locally
+        correct = (guess.lower() == self.current_prompt.lower())
+        # broadcast my guess + my id
+        network.broadcast_event({
+            "type":  "guess",
+            "guess": guess,
+            "id":    self.client_id
+        })
+        if correct:
+            # on a correct guess *I* (the guesser) become the drawer next
+            self._start_new_round(new_drawer=self.client_id)
 
     def _change_brush_kind(self, kind: str) -> None:
         """Callback from BrushSelectionPopup with a valid brush name."""
@@ -366,7 +394,7 @@ class GestureDrawingApp(DrawingApp):
             "coords":  [cx, cy],
         })
 
-        if self.drawing_enabled and finger_straight:
+        if self.is_drawer and self.drawing_enabled and finger_straight:
             draw_func = {
                 BrushType.SOLID: self._draw_solid,
                 BrushType.AIR: self._draw_air,
@@ -605,6 +633,18 @@ class GestureDrawingApp(DrawingApp):
         """Draw whatever your peer just sent."""
         t = ev.get("type")
 
+        if t == "start_round":
+            # sync exactly what the drawer told us
+            self._start_new_round(drawer=ev["drawer_id"],
+                                  prompt=ev["prompt"])
+            return
+        if t == "guess" and self.is_drawer:
+            # only the active drawer handles guesses
+            if ev["guess"].lower() == self.current_prompt.lower():
+                # correct — new round with that guesser as drawer
+                self._start_new_round(drawer=ev["id"])
+            return
+
         if t == "command":
             # a peer hit space (or spoke START/STOP)
             self._handle_command(ev["command"])
@@ -707,11 +747,6 @@ class GestureDrawingApp(DrawingApp):
                                     fill="",
                                     width=5,
                                     tags="drawing")
-            
-        elif t == "guess":
-            # remote peer made a guess
-            guess = ev["guess"]
-            self._evaluate_guess(guess)
 
         # handle cursor events
         if t == "cursor":
@@ -730,3 +765,21 @@ class GestureDrawingApp(DrawingApp):
                 )
                 self.remote_cursors[peer_id] = oid
 
+    def _start_new_round(self, drawer: str, prompt: str = None):
+        # if called by a correct‐guess swap, pick a new word:
+        self.current_prompt = prompt or random.choice(_PROMPTS)
+        self.current_drawer = drawer
+        self.is_drawer = (drawer == self.client_id)
+        self.canvas.delete("drawing")
+
+        # broadcast to everyone
+        network.broadcast_event({
+            "type":      "start_round",
+            "drawer_id": self.current_drawer,
+            "prompt":    self.current_prompt,
+        })
+
+        if self.is_drawer:
+            self._set_instruction(self._instruction_banner("Say 'START' to begin."))
+        else:
+            self._set_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
