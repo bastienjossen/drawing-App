@@ -760,11 +760,16 @@ class GestureDrawingApp(DrawingApp):
                 )
                 self.remote_cursors[peer_id] = oid
 
-                
+
     def _start_new_round(self, drawer: str, prompt: str):
         self.current_drawer = drawer
         self.current_prompt = prompt
         self.is_drawer       = (drawer == self.client_id)
+        # reset *everybody's* drawing state
+        self.drawing_enabled        = False
+        self.square_drawing_enabled = False
+        self.circle_drawing_enabled = False
+
         self.canvas.delete("drawing")
         if self.is_drawer:
             self._set_instruction(self._instruction_banner("Say 'START' to begin."))
