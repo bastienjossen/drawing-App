@@ -18,7 +18,7 @@ import cv2
 import mediapipe as mp
 
 from .drawing import DrawingApp
-from .voice import listen_for_commands
+from .voice import listen_for_commands, USE_LLM
 
 __all__ = ["GestureDrawingApp"]
 
@@ -235,7 +235,7 @@ class GestureDrawingApp(DrawingApp):
                 self.brush.kind = BrushType.ERASER
                 self.drawing_enabled = True
                 self._set_instruction(
-                    self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing.")
+                    self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing. 'BRUSH' to change back to brush.")
                 )
                 return
         
@@ -316,8 +316,6 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.delete("drawing")
             self.current_prompt = random.choice(_PROMPTS)
             self.drawing_enabled = False
-        else:
-            self._set_instruction(f"✘ '{guess}' is wrong – keep trying!")
 
     def _change_colour(self, colour: str) -> None:
         try:
@@ -785,7 +783,10 @@ class GestureDrawingApp(DrawingApp):
         if self.is_drawer:
             self._set_instruction(self._instruction_banner("Say 'START' to begin."))
         else:
-            self._set_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
+            if USE_LLM:
+                self._set_instruction("Opponent is drawing — say your guess!")
+            else:
+                self._set_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
 
     def _local_start_round(self, drawer_id: str = None):
         # pick a word
