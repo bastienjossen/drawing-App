@@ -197,6 +197,10 @@ class GestureDrawingApp(DrawingApp):
         if self.is_drawer:
             if cmd == "START":
                 # no round_active check any more
+                if not self.round_active:
+                    self._local_start_round()
+                    self.round_active = True
+                    
                 self.drawing_enabled = True
                 self._set_instruction(
                     self._instruction_banner(
@@ -210,6 +214,7 @@ class GestureDrawingApp(DrawingApp):
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
                 self._set_instruction(self._instruction_banner("Say 'START' to resume."))
+                network.broadcast_event({"type":"command","command":"STOP"})
                 return
 
             if cmd.startswith("CHANGE BRUSH TO "):
