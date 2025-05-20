@@ -74,6 +74,7 @@ class GestureDrawingApp(DrawingApp):
         self.is_drawer:     bool   = True
         self.current_prompt: str   = random.choice(_PROMPTS)
         self.round_active = False
+        self.prompt_visible = True
 
         self.master.bind_all("<KeyPress-space>", self._on_space)
         self.master.bind("<ButtonPress-1>",   self._on_mouse_down)
@@ -185,10 +186,18 @@ class GestureDrawingApp(DrawingApp):
 
     # ------------------------------ UI helpers -----------------------------
     def _instruction_banner(self, *extra: str) -> str:
-        msg = [f"Draw: {self.current_prompt}"] + list(extra)
+        msg = list(extra)
         return "\n".join(msg)
 
     def _set_instruction(self, *lines: str) -> None:
+        self.canvas.itemconfig(self.instruction_text, text="\n".join(lines))
+
+    def _refresh_instruction(self, *extra_lines: str) -> None:
+        """Update the instruction text, optionally hiding the prompt line."""
+        lines = []
+        if self.prompt_visible:
+            lines.append(f"Draw: {self.current_prompt}")
+        lines.extend(extra_lines)
         self.canvas.itemconfig(self.instruction_text, text="\n".join(lines))
 
     # ------------------------------ command handling -----------------------
@@ -202,18 +211,29 @@ class GestureDrawingApp(DrawingApp):
                     self.round_active = True
 
                 self.drawing_enabled = True
-                self._set_instruction(
+                self.prompt_visible = True
+                self._refresh_instruction(
                     self._instruction_banner(
                         "Say 'STOP' to stop drawing.",
                         "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
                         "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
                     )
                 )
+                self.master.after(10_000, lambda: (
+                    setattr(self, "prompt_visible", False),
+                    self._refresh_instruction(
+                        self._instruction_banner(
+                            "Say 'STOP' to stop drawing.",
+                            "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
+                            "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+                        )
+                    )
+                ))
                 return
             if cmd == "STOP":
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
-                self._set_instruction(self._instruction_banner("Say 'START' to resume."))
+                self._refresh_instruction(self._instruction_banner("Say 'START' to resume."))
                 network.broadcast_event({"type":"command","command":"STOP"})
                 return
 
@@ -223,7 +243,7 @@ class GestureDrawingApp(DrawingApp):
                     self.brush.kind = BrushType(raw_type)  # type: ignore[arg-type]
                 except ValueError:
                     print(f"Invalid brush type: {raw_type!r}")
-                    self._set_instruction(self._instruction_banner(f"Invalid brush type: '{raw_type}'. Try again."))
+                    self._refresh_instruction(self._instruction_banner(f"Invalid brush type: '{raw_type}'. Try again."))
                 return
 
             if cmd.startswith("CHANGE COLOR TO "):
@@ -234,7 +254,7 @@ class GestureDrawingApp(DrawingApp):
                 # Switch into eraser brush immediately
                 self.brush.kind = BrushType.ERASER
                 self.drawing_enabled = True
-                self._set_instruction(
+                self._refresh_instruction(
                     self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing. 'BRUSH' to change back to brush.")
                 )
                 return
@@ -243,7 +263,7 @@ class GestureDrawingApp(DrawingApp):
                 # Open the voice-driven brush selector popup
                 from .voice import BrushSelectionPopup
         
-                self._set_instruction(
+                self._refresh_instruction(
                     self._instruction_banner("Say the brush name…")
                 )
                 BrushSelectionPopup(self.master, self._change_brush_kind)
@@ -291,7 +311,7 @@ class GestureDrawingApp(DrawingApp):
         """Callback from BrushSelectionPopup with a valid brush name."""
         print(f"[Popup] Selected brush: {kind}")
         self.brush.kind = BrushType(kind)  # kind is already lowercase
-        self._set_instruction(
+        self._refresh_instruction(
             self._instruction_banner(f"Brush set to {kind}. Say 'STOP' to halt.")
         )
     # ---------------------------------------------------------------------
@@ -301,18 +321,18 @@ class GestureDrawingApp(DrawingApp):
         if not active:
             setattr(self, attr, True)
             self.drawing_enabled = False
-            self._set_instruction(
+            self._refresh_instruction(
                 f"{shape.capitalize()} drawing mode ON. Move thumb/index to size.\nSay '{shape.upper()}' again to finalise."
             )
         else:
             setattr(self, attr, False)
             finalize = getattr(self, f"_finalize_{shape}")
             finalize()
-            self._set_instruction(f"{shape.capitalize()} finalised. Say '{shape.upper()}' to start anew.")
+            self._refresh_instruction(f"{shape.capitalize()} finalised. Say '{shape.upper()}' to start anew.")
 
     def _evaluate_guess(self, guess: str) -> None:
         if guess.lower() == self.current_prompt.lower():
-            self._set_instruction(f"✔ Correct! It *was* {self.current_prompt}. Picked a new one.")
+            self._refresh_instruction(f"✔ Correct! It *was* {self.current_prompt}. Picked a new one.")
             self.canvas.delete("drawing")
             self.current_prompt = random.choice(_PROMPTS)
             self.drawing_enabled = False
@@ -781,12 +801,12 @@ class GestureDrawingApp(DrawingApp):
 
         self.canvas.delete("drawing")
         if self.is_drawer:
-            self._set_instruction(self._instruction_banner("Say 'START' to begin."))
+            self._refresh_instruction(self._instruction_banner("Say 'START' to begin."))
         else:
             if USE_LLM:
-                self._set_instruction("Opponent is drawing — say your guess!")
+                self._refresh_instruction("Opponent is drawing — say your guess!")
             else:
-                self._set_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
+                self._refresh_instruction("Opponent is drawing — say 'MY GUESS IS …' to guess!")
 
     def _local_start_round(self, drawer_id: str = None):
         # pick a word
