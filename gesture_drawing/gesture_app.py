@@ -40,22 +40,21 @@ class Brush:
 
 
 _PROMPTS: Sequence[str] = (
-    "Dog",      
-    "Fish",     
-    "Bird",     
-    "House",        
-    "Star",     
-    "Heart",        
-    "Cloud",    
-    "Flower",   
-    "Apple",       
-    "Boat",     
-    "Cup",      
-    "Key",       
-    "Book",            
-    "Moon",      
+    "Dog",
+    "Fish",
+    "Bird",
+    "House",
+    "Star",
+    "Heart",
+    "Cloud",
+    "Flower",
+    "Apple",
+    "Boat",
+    "Cup",
+    "Key",
+    "Book",
+    "Moon",
 )
-
 
 
 class GestureDrawingApp(DrawingApp):
@@ -70,24 +69,24 @@ class GestureDrawingApp(DrawingApp):
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
-        self.current_drawer: str   = self.client_id   # I start as drawer
-        self.is_drawer:     bool   = True
-        self.current_prompt: str   = random.choice(_PROMPTS)
+        self.current_drawer: str = self.client_id  # I start as drawer
+        self.is_drawer: bool = True
+        self.current_prompt: str = random.choice(_PROMPTS)
         self.round_active = False
         self.prompt_visible = True
 
         self.master.bind_all("<KeyPress-space>", self._on_space)
-        self.master.bind("<ButtonPress-1>",   self._on_mouse_down)
-        self.master.bind("<B1-Motion>",      self._on_mouse_drag)
+        self.master.bind("<ButtonPress-1>", self._on_mouse_down)
+        self.master.bind("<B1-Motion>", self._on_mouse_drag)
         self.master.bind("<ButtonRelease-1>", self._on_mouse_up)
-        
+
         # create a small video widget…
         self.video_label = tk.Label(self.master, bd=2, relief="sunken")
         # …and place it over the canvas at bottom-right
         self.video_label.place(
-            relx=1.0, rely=1.0,           # relative to bottom-right of master
-            anchor="se",                  # align its south-east corner
-            width=288, height=162         # whatever small size you like
+            relx=1.0, rely=1.0,  # relative to bottom-right of master
+            anchor="se",  # align its south-east corner
+            width=288, height=162  # whatever small size you like
         )
 
         # start network client (point to your server)
@@ -148,7 +147,7 @@ class GestureDrawingApp(DrawingApp):
         self._handle_command(cmd)
         # 2) broadcast it so peers pick it up too
         network.broadcast_event({
-            "type":    "command",
+            "type": "command",
             "command": cmd,
         })
 
@@ -170,10 +169,10 @@ class GestureDrawingApp(DrawingApp):
                                 tags="drawing")
         # broadcast to peers
         network.broadcast_event({
-            "type":   "line",
+            "type": "line",
             "coords": [x1, y1, x2, y2],
             "colour": self.brush.colour,
-            "width":  3,
+            "width": 3,
         })
         # advance the stroke
         self.last_x, self.last_y = x2, y2
@@ -234,7 +233,7 @@ class GestureDrawingApp(DrawingApp):
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
                 self._refresh_instruction(self._instruction_banner("Say 'START' to resume."))
-                network.broadcast_event({"type":"command","command":"STOP"})
+                network.broadcast_event({"type": "command", "command": "STOP"})
                 return
 
             if cmd.startswith("CHANGE BRUSH TO "):
@@ -249,7 +248,7 @@ class GestureDrawingApp(DrawingApp):
             if cmd.startswith("CHANGE COLOR TO "):
                 self._change_colour(cmd.removeprefix("CHANGE COLOR TO ").strip().lower())
                 return
-            
+
             if cmd == "ERASER":
                 # Switch into eraser brush immediately
                 self.brush.kind = BrushType.ERASER
@@ -258,17 +257,17 @@ class GestureDrawingApp(DrawingApp):
                     self._instruction_banner("Eraser ON. Say 'STOP' to stop erasing. 'BRUSH' to change back to brush.")
                 )
                 return
-        
+
             if cmd == "BRUSH":
                 # Open the voice-driven brush selector popup
                 from .voice import BrushSelectionPopup
-        
+
                 self._refresh_instruction(
                     self._instruction_banner("Say the brush name…")
                 )
                 BrushSelectionPopup(self.master, self._change_brush_kind)
                 return
-            
+
             if cmd == "PLACE":
                 if self.square_drawing_enabled:
                     # this will call _finalize_square internally
@@ -288,20 +287,20 @@ class GestureDrawingApp(DrawingApp):
             if cmd.startswith("MY GUESS IS "):
                 guess = cmd.removeprefix("MY GUESS IS ").strip()
                 network.broadcast_event({
-                    "type":  "guess",
-                    "id":    self.client_id,
+                    "type": "guess",
+                    "id": self.client_id,
                     "guess": guess,
                 })
                 return
-            
+
     def _send_guess(self, guess: str):
         # evaluate locally
         correct = (guess.lower() == self.current_prompt.lower())
         # broadcast my guess + my id
         network.broadcast_event({
-            "type":  "guess",
+            "type": "guess",
             "guess": guess,
-            "id":    self.client_id
+            "id": self.client_id
         })
         if correct:
             # on a correct guess *I* (the guesser) become the drawer next
@@ -314,6 +313,7 @@ class GestureDrawingApp(DrawingApp):
         self._refresh_instruction(
             self._instruction_banner(f"Brush set to {kind}. Say 'STOP' to halt.")
         )
+
     # ---------------------------------------------------------------------
     def _toggle_shape(self, shape: str) -> None:  # square / circle
         attr = f"{shape}_drawing_enabled"
@@ -374,14 +374,13 @@ class GestureDrawingApp(DrawingApp):
         # now convert to PhotoImage
         disp = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(disp)
-        
+
         imgtk = ImageTk.PhotoImage(image=img)
         self.video_label.imgtk = imgtk
         self.video_label.configure(image=imgtk)
 
         # schedule next frame
         self.master.after(10, self._update_frame)
-
 
     def _handle_hand(self, landmarks: Any, frame_shape: tuple[int, int, int]) -> None:
         self._mpdraw.draw_landmarks(self.frame, landmarks, self._mphands.HAND_CONNECTIONS)
@@ -404,14 +403,15 @@ class GestureDrawingApp(DrawingApp):
         cx, cy = self.to_canvas(x, y, frame_w=frame_w, frame_h=frame_h)
 
         if self.pointer_id is None:
-            self.pointer_id = self.canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="", tags="pointer")
+            self.pointer_id = self.canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5, fill="red", outline="",
+                                                      tags="pointer")
         else:
             self.canvas.coords(self.pointer_id, cx - 5, cy - 5, cx + 5, cy + 5)
-        
+
         network.broadcast_event({
-            "type":    "cursor",
-            "id":      self.client_id,
-            "coords":  [cx, cy],
+            "type": "cursor",
+            "id": self.client_id,
+            "coords": [cx, cy],
         })
 
         self.canvas.tag_raise("pointer")
@@ -456,7 +456,7 @@ class GestureDrawingApp(DrawingApp):
                                     tags="drawing")
             network.broadcast_event({
                 "type": "air",
-                "coords": [ox, oy, ox+3, oy+3],
+                "coords": [ox, oy, ox + 3, oy + 3],
                 "colour": self.brush.colour,
             })
 
@@ -561,6 +561,7 @@ class GestureDrawingApp(DrawingApp):
             })
 
         # --------------------------- shape previews ---------------------------
+
     def _update_square_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
         cx1, cy1 = self.to_canvas(x1, y1, frame_w=fw, frame_h=fh)
         cx2, cy2 = self.to_canvas(x2, y2, frame_w=fw, frame_h=fh)
@@ -577,7 +578,7 @@ class GestureDrawingApp(DrawingApp):
         else:
             self.square_preview = self.canvas.create_polygon(*corners, outline="red", fill="", width=5, tags="drawing")
         network.broadcast_event({
-            "type":    "square_preview",
+            "type": "square_preview",
             "corners": corners,
         })
 
@@ -588,7 +589,7 @@ class GestureDrawingApp(DrawingApp):
             corners = self.canvas.coords(self.square_preview)  # [x1,y1, x2,y2, …]
             # 2. broadcast before we destroy it
             network.broadcast_event({
-                "type":    "square_finalize",
+                "type": "square_finalize",
                 "corners": corners,
             })
             # 3. commit the look
@@ -610,8 +611,8 @@ class GestureDrawingApp(DrawingApp):
         else:
             self.circle_preview = self.canvas.create_oval(*bbox, outline="red", fill="", width=5, tags="drawing")
         network.broadcast_event({
-            "type":    "circle_preview",
-            "bbox":    bbox,
+            "type": "circle_preview",
+            "bbox": bbox,
         })
 
     def _finalize_circle(self) -> None:
@@ -658,7 +659,7 @@ class GestureDrawingApp(DrawingApp):
         if t == "start_round":
             self._start_new_round(ev["drawer_id"], ev["prompt"])
             return
-        
+
         if t == "guess" and self.is_drawer:
             if ev["guess"].lower() == self.current_prompt.lower():
                 print(f"------------   CONGRATULATIONS PEER {ev['id']}  ------------\nIT WAS '{self.current_prompt}'")
@@ -675,41 +676,41 @@ class GestureDrawingApp(DrawingApp):
             return
 
         if t == "line":
-            x1,y1,x2,y2 = ev["coords"]
+            x1, y1, x2, y2 = ev["coords"]
             self.canvas.create_line(x1, y1, x2, y2,
-                                     fill=ev.get("colour", "black"),
-                                     width=ev.get("width", 2),
-                                     tags="drawing")
+                                    fill=ev.get("colour", "black"),
+                                    width=ev.get("width", 2),
+                                    tags="drawing")
         # extend handling for other types as needed
         elif t == "air":
-            x1,y1,x2,y2 = ev["coords"]
-            self.canvas.create_oval(x1,y1,x2,y2,
+            x1, y1, x2, y2 = ev["coords"]
+            self.canvas.create_oval(x1, y1, x2, y2,
                                     fill=ev["colour"],
                                     tags="drawing")
 
         elif t == "texture":
-            x,y = ev["coords"]
+            x, y = ev["coords"]
             self.canvas.create_text(x, y, text="✶",
                                     fill=ev["colour"],
-                                    font=("Arial",10),
+                                    font=("Arial", 10),
                                     tags="drawing")
 
         elif t == "calligraphy":
             poly = ev["polygon"]
             self.canvas.create_polygon(*poly,
-                                    fill=ev["colour"],
-                                    outline=ev["colour"],
-                                    tags="drawing")
+                                       fill=ev["colour"],
+                                       outline=ev["colour"],
+                                       tags="drawing")
 
         elif t == "blending":
-            x,y = ev["coords"]
-            self.canvas.create_oval(x-5, y-5, x+5, y+5,
+            x, y = ev["coords"]
+            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5,
                                     fill=ev["colour"],
                                     stipple="gray50",
                                     tags="drawing")
 
         elif t == "shining":
-            x,y = ev["center"]
+            x, y = ev["center"]
             for i in range(8):
                 ang = (2 * math.pi / 8) * i
                 ex = x + 10 * math.cos(ang)
@@ -717,12 +718,12 @@ class GestureDrawingApp(DrawingApp):
                 self.canvas.create_line(x, y, ex, ey,
                                         fill=ev["colour"],
                                         tags="drawing")
-            self.canvas.create_oval(x-2, y-2, x+2, y+2,
+            self.canvas.create_oval(x - 2, y - 2, x + 2, y + 2,
                                     fill=ev["colour"],
                                     tags="drawing")
 
         elif t == "eraser":
-            x1,y1,x2,y2 = ev["coords"]
+            x1, y1, x2, y2 = ev["coords"]
             bg = self.canvas["bg"]
             self.canvas.create_line(x1, y1, x2, y2,
                                     width=ev["width"],
@@ -735,10 +736,10 @@ class GestureDrawingApp(DrawingApp):
                 self.canvas.coords(self.remote_sqprev, *corners)
             else:
                 self.remote_sqprev = self.canvas.create_polygon(*corners,
-                                                            outline="red",
-                                                            fill="",
-                                                            width=5,
-                                                            tags="drawing")
+                                                                outline="red",
+                                                                fill="",
+                                                                width=5,
+                                                                tags="drawing")
 
         elif t == "square_finalize":
             corners = ev["corners"]
@@ -746,21 +747,21 @@ class GestureDrawingApp(DrawingApp):
             if hasattr(self, "remote_sqprev"):
                 self.canvas.delete(self.remote_sqprev)
             self.canvas.create_polygon(*corners,
-                                    outline="black",
-                                    fill="",
-                                    width=5,
-                                    tags="drawing")
-            
+                                       outline="black",
+                                       fill="",
+                                       width=5,
+                                       tags="drawing")
+
         elif t == "circle_preview":
             bbox = ev["bbox"]
             if hasattr(self, "remote_circprev"):
                 self.canvas.coords(self.remote_circprev, *bbox)
             else:
                 self.remote_circprev = self.canvas.create_oval(*bbox,
-                                                            outline="red",
-                                                            fill="",
-                                                            width=5,
-                                                            tags="drawing")
+                                                               outline="red",
+                                                               fill="",
+                                                               width=5,
+                                                               tags="drawing")
         elif t == "circle_finalize":
             bbox = ev["bbox"]
             # remove preview if you like:
@@ -775,27 +776,26 @@ class GestureDrawingApp(DrawingApp):
         # handle cursor events
         if t == "cursor":
             peer_id = ev["id"]
-            x, y   = ev["coords"]
+            x, y = ev["coords"]
             # if we already have an oval for that peer, move it
             if peer_id in self.remote_cursors:
                 self.canvas.coords(self.remote_cursors[peer_id],
-                    x-5, y-5, x+5, y+5
-                )
+                                   x - 5, y - 5, x + 5, y + 5
+                                   )
             else:
                 # create a new small circle in a different color
                 oid = self.canvas.create_oval(
-                    x-5, y-5, x+5, y+5,
+                    x - 5, y - 5, x + 5, y + 5,
                     fill="blue", outline="", tags="cursor"
                 )
                 self.remote_cursors[peer_id] = oid
 
-
     def _start_new_round(self, drawer: str, prompt: str):
         self.current_drawer = drawer
         self.current_prompt = prompt
-        self.is_drawer       = (drawer == self.client_id)
+        self.is_drawer = (drawer == self.client_id)
         # reset *everybody's* drawing state
-        self.drawing_enabled        = False
+        self.drawing_enabled = False
         self.square_drawing_enabled = False
         self.circle_drawing_enabled = False
 
@@ -819,7 +819,7 @@ class GestureDrawingApp(DrawingApp):
 
         # broadcast exactly once
         network.broadcast_event({
-            "type":      "start_round",
+            "type": "start_round",
             "drawer_id": drawer,
-            "prompt":    word,
+            "prompt": word,
         })
