@@ -828,6 +828,8 @@ class GestureDrawingApp(DrawingApp):
         self.current_drawer = drawer
         self.current_prompt = prompt
         self.is_drawer = (drawer == self.client_id)
+        # only the drawer should see the prompt word
+        self.prompt_visible = self.is_drawer
         # reset *everybody's* drawing state
         self.drawing_enabled = False
         self.square_drawing_enabled = False
