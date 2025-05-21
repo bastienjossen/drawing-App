@@ -628,8 +628,9 @@ class GestureDrawingApp(DrawingApp):
             )
 
         network.broadcast_event({
-            "type": "square_preview",
+            "type":   "square_preview",
             "corners": corners,
+            "colour": color,
         })
 
     def _finalize_square(self) -> None:
@@ -638,6 +639,7 @@ class GestureDrawingApp(DrawingApp):
             network.broadcast_event({
                 "type": "square_finalize",
                 "corners": corners,
+                "colour": final_color,
             })
 
             # ←–– HERE: commit using the current brush colour
@@ -676,6 +678,7 @@ class GestureDrawingApp(DrawingApp):
         network.broadcast_event({
             "type": "circle_preview",
             "bbox": bbox,
+            "colour": color,
         })
 
     def _finalize_circle(self) -> None:
@@ -684,6 +687,7 @@ class GestureDrawingApp(DrawingApp):
             network.broadcast_event({
                 "type": "circle_finalize",
                 "bbox": bbox,
+                 "colour": final_color,
             })
 
             # ←–– HERE: commit using the current brush colour
@@ -799,44 +803,48 @@ class GestureDrawingApp(DrawingApp):
                                     tags="drawing")
 
         elif t == "square_preview":
+            c = ev.get("colour", "red")
             corners = ev["corners"]
             if hasattr(self, "remote_sqprev"):
                 self.canvas.coords(self.remote_sqprev, *corners)
             else:
                 self.remote_sqprev = self.canvas.create_polygon(*corners,
-                                                                outline="red",
+                                                                outline=c,
                                                                 fill="",
                                                                 width=5,
                                                                 tags="drawing")
 
         elif t == "square_finalize":
+            c = ev.get("colour", "black")
             corners = ev["corners"]
             # remove preview if you like:
             if hasattr(self, "remote_sqprev"):
                 self.canvas.delete(self.remote_sqprev)
             self.canvas.create_polygon(*corners,
-                                       outline="black",
+                                       outline=c,
                                        fill="",
                                        width=5,
                                        tags="drawing")
 
         elif t == "circle_preview":
+            c = ev.get("colour", "red")
             bbox = ev["bbox"]
             if hasattr(self, "remote_circprev"):
                 self.canvas.coords(self.remote_circprev, *bbox)
             else:
                 self.remote_circprev = self.canvas.create_oval(*bbox,
-                                                               outline="red",
+                                                               outline=c,
                                                                fill="",
                                                                width=5,
                                                                tags="drawing")
         elif t == "circle_finalize":
+            c = ev.get("colour", "black")
             bbox = ev["bbox"]
             # remove preview if you like:
             if hasattr(self, "remote_circprev"):
                 self.canvas.delete(self.remote_circprev)
             self.canvas.create_oval(*bbox,
-                                    outline="black",
+                                    outline=c,
                                     fill="",
                                     width=5,
                                     tags="drawing")
