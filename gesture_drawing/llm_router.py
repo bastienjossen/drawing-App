@@ -114,8 +114,10 @@ def normalise_brush(text: str) -> Optional[str]:
 
     If there is a Brush type specified, reply with the exact name of the brush type.
 
+    if they say are they mean air.
+
     Brush types include:
-    solid, air (are), texture, calligraphy, blending, shining
+    solid, air, texture, calligraphy, blending, shining
 
     Do not explain or comment.
     """
