@@ -27,6 +27,8 @@ USE_LLM = False  # set this in your main.py
 def listen_for_commands(callback: CommandCallback) -> None:
     def _listener() -> None:
         recog = sr.Recognizer()
+        recog.energy_threshold = 150        # better for short commands
+        recog.dynamic_energy_threshold = False
         with sr.Microphone() as src:
             recog.adjust_for_ambient_noise(src, duration=1)
             print("Listening for commands…")
