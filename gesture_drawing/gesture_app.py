@@ -67,6 +67,7 @@ class GestureDrawingApp(DrawingApp):
         self.master = master
 
         self._start_reminder_id: str | None = None
+        self._next_drawer: str | None = None
 
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
@@ -208,7 +209,12 @@ class GestureDrawingApp(DrawingApp):
             if cmd == "START":
                 # 1) If the round isn't active, this START just begins the game:
                 if not self.round_active:
-                    self._local_start_round()
+                    # only now actually *start* the round,
+                    # and if someone was queued as next_drawer, use that
+                    self._local_start_round(drawer_id=self._next_drawer)
+                    # clear so future rounds default back to you
+                    self._next_drawer = None
+
                     self.round_active = True
                     self.prompt_visible = True
 
@@ -308,8 +314,12 @@ class GestureDrawingApp(DrawingApp):
             "id": self.client_id
         })
         if correct:
-            # on a correct guess *I* (the guesser) become the drawer next
-            self._start_new_round(new_drawer=self.client_id)
+            # on correct guess: schedule me as next drawer, but don't start yet
+            self._next_drawer = self.client_id
+            self.round_active = False
+            self.canvas.delete("drawing")
+            self.prompt_visible = False
+            self._refresh_instruction("✔ You were right! Say 'START' to draw next.")
 
     def _change_brush_kind(self, kind: str) -> None:
         """Callback from BrushSelectionPopup with a valid brush name."""
@@ -698,7 +708,11 @@ class GestureDrawingApp(DrawingApp):
             if ev["guess"].lower() == self.current_prompt.lower():
                 print(f"------------   CONGRATULATIONS PEER {ev['id']}  ------------\nIT WAS '{self.current_prompt}'")
                 # host kicks off next round *with* the guesser as drawer
-                self._local_start_round(drawer_id=ev["id"])
+                # peer got it right → schedule them as next drawer, but don't start yet
+                self._next_drawer = ev["id"]
+                self.round_active = False
+                self.canvas.delete("drawing")
+                self._refresh_instruction("Opponent guessed! Say 'START' to begin next round.")
             else:
                 print(f"Peer {ev['id']} guessed '{ev['guess']}' – incorrect.")
                 self._evaluate_guess(ev["guess"])
