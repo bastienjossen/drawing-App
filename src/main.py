@@ -4,6 +4,7 @@ import cv2
 import mediapipe as mp
 from drawing import DrawingApp
 from utils import listen_for_commands
+from utils import BrushSelectionPopup
 import random
 import time
 
@@ -59,17 +60,22 @@ class GestureDrawingApp(DrawingApp):
         if command == "START":
             self.drawing_enabled = True
             self.update_instruction(
-                "Say 'STOP' to stop drawing.\nSay 'CHANGE BRUSH TO SOLID / AIR / SHINING / CALLIGRAPHY / BLENDING' to "
-                "change the brush type. \n Say 'CHANGE BRUSH TO ERASER' to start cleaning")
+                "Say 'STOP' to stop drawing.\nSay 'BRUSH' to open brush selector.\nSay 'CHANGE COLOR TO RED / BLUE / etc.' to change color.\nSay 'ERASER' to start erasing.")
         elif command == "STOP":
             self.drawing_enabled = False
+
+            # Reset brush type and color if currently erasing
+            if self.brush_type == "eraser":
+                self.brush_type = "solid"
+                self.brush_color = "black"
+
+            # Restore the initial instruction
             self.update_instruction(
-                "Say 'START' to start drawing.\nSay 'SQUARE' or 'CIRCLE' to draw a square or circle.")
-        elif command.startswith("CHANGE BRUSH TO "):
-            brush_type = command.replace("CHANGE BRUSH TO ", "").strip().lower()
-            self.change_brush_type(brush_type)
+                f"Draw: {self.current_prompt}\n"
+                "Say 'START' to start drawing.\n"
+                "Say 'SQUARE' or 'CIRCLE' to draw a square or circle."
+            )
         elif command.startswith("CHANGE COLOR TO "):
-            # Remove the command prefix and parse for an optional brush specifier.
             command_remainder = command.replace("CHANGE COLOR TO ", "").strip().lower()
             self.change_brush_color(command_remainder)
         elif command.startswith("MY GUESS IS "):
@@ -111,6 +117,20 @@ class GestureDrawingApp(DrawingApp):
                 self.circle_drawing_enabled = False
                 self.finalize_circle()
                 self.update_instruction("Circle drawing finalized. Say 'CIRCLE' to start again.")
+        elif command == "ERASER":
+            self.brush_type = "eraser"
+            self.drawing_enabled = True
+            self.update_instruction(
+                "Say 'STOP' to stop erasing."
+            )
+        elif command == "BRUSH":
+            self.update_instruction("Brush menu opened. Select the brush type...")
+            BrushSelectionPopup(self.master, self.change_brush_type)
+
+    def change_brush_type(self, brush_type):
+        print(f"[Brush Popup] Selected brush: {brush_type}")
+        self.brush_type = brush_type
+        self.update_instruction(f"Brush changed to {brush_type}.\nSay 'STOP' to stop drawing.\nSay 'BRUSH' to open brush selector.\nSay 'CHANGE COLOR TO RED / BLUE / etc.' to change color.\nSay 'ERASER' to start erasing.")
 
     def change_brush_color(self, color, brush_index=None):
         """Change the brush color if valid; if brush_index is provided, update that specific brush."""
@@ -121,14 +141,6 @@ class GestureDrawingApp(DrawingApp):
             print(f"Brush color is changed to '{color}'.")
         except tk.TclError:
             print(f"Invalid color: '{color}'. Command ignored.")
-
-    def change_brush_type(self, brush_type):
-        if brush_type in ["solid", "air", "texture", "calligraphy", "blending", "shining", "eraser"]:
-            self.brush_type = brush_type
-            brush_color = self.brush_color
-            print(f"Brush type changed to {brush_type}, color is set {brush_color}")
-        else:
-            print(f"Unknown brush type: {brush_type}")
 
     def draw_solid_brush(self, x, y):
         if self.prev_coord:
