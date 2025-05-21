@@ -95,14 +95,17 @@ def normalise(text: str) -> Optional[str]:
 def normalise_place(text: str) -> Optional[str]:
     PLACE_PROMPT = """\
     You are in shape‐preview mode (square or circle). The user is sizing a shape on the canvas.
+    "play" = place
+
     If the user says "Circle" or "square", reply with:
+        PLACE
 
     If you detect any attempt of finishing the placement of the shape, reply with:
         PLACE
     If the user tells you to put it somewhere (eg. "right there", "there"), reply with:
         PLACE
 
-    If the message is unrelated or not a command to place the shape, reply with NOTHING.
+    If the message is unrelated reply with NOTHING.
     Do not explain or comment."""
     reply = _call_llm(PLACE_PROMPT, text)
     if not reply:

@@ -54,7 +54,27 @@ _PROMPTS: Sequence[str] = (
     "Key",
     "Book",
     "Moon",
+    "Tree",
+    "Car",
+    "Cat",
+    "Chair",
+    "Ball",
+    "Shoe",
+    "Hat",
+    "Bed",
+    "Cake",
+    "Bell",
+    "Box",
+    "Pen",
+    "Egg",
+    "Leaf",
+    "Nose",
+    "Fork",
+    "Hand",
+    "Eye",
+    "Ring",
 )
+
 
 
 class GestureDrawingApp(DrawingApp):
