@@ -66,6 +66,8 @@ class GestureDrawingApp(DrawingApp):
 
         self.master = master
 
+        self._start_reminder_id: str | None = None
+
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
@@ -123,7 +125,7 @@ class GestureDrawingApp(DrawingApp):
         self.instruction_text = self.canvas.create_text(
             self.master.winfo_width() * 5 // 3,
             30,
-            text=self._instruction_banner("Say 'START' to start drawing."),
+            text=self._instruction_banner("Say 'START' to begin the game."),
             font=("Arial", 15),
             fill="black",
             anchor="n",
@@ -204,30 +206,33 @@ class GestureDrawingApp(DrawingApp):
         cmd = raw.upper()
         if self.is_drawer:
             if cmd == "START":
-                # no round_active check any more
+                # 1) If the round isn't active, this START just begins the game:
                 if not self.round_active:
                     self._local_start_round()
                     self.round_active = True
+                    self.prompt_visible = True
 
-                self.drawing_enabled = True
-                self.prompt_visible = True
-                self._refresh_instruction(
-                    self._instruction_banner(
-                        "Say 'STOP' to stop drawing.",
-                        "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
-                        "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
-                    )
-                )
-                self.master.after(10_000, lambda: (
-                    setattr(self, "prompt_visible", False),
-                    self._refresh_instruction(
-                        self._instruction_banner(
-                            "Say 'STOP' to stop drawing.",
-                            "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
-                            "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+                    # store the after() ID so we can cancel it later
+                    self._start_reminder_id = self.master.after(
+                        5_000,
+                        lambda: (
+                            setattr(self, "prompt_visible", False),
+                            self._refresh_instruction("Say 'START' again to begin drawing.")
                         )
                     )
-                ))
+                    return
+                if self._start_reminder_id is not None:
+                    self.master.after_cancel(self._start_reminder_id)
+                    self._start_reminder_id = None
+                self.prompt_visible = False
+                # 2) Round is active => now actually enable the brush:
+                self.drawing_enabled = True
+                self._refresh_instruction(
+                    "Say 'STOP' to stop drawing.",
+                    "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
+                    "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+                )
+                network.broadcast_event({"type": "command", "command": "START"})
                 return
             if cmd == "STOP":
                 self.drawing_enabled = False
@@ -569,36 +574,53 @@ class GestureDrawingApp(DrawingApp):
         half_side = diag / math.sqrt(2) / 2
         centre = ((cx1 + cx2) / 2, (cy1 + cy2) / 2)
         phi = math.atan2(cy2 - cy1, cx2 - cx1) - math.pi / 4
+
         corners: list[float] = []
         for i in range(4):
             ang = phi + i * math.pi / 2
-            corners.extend([centre[0] + half_side * math.cos(ang), centre[1] + half_side * math.sin(ang)])
+            corners.extend([
+                centre[0] + half_side * math.cos(ang),
+                centre[1] + half_side * math.sin(ang)
+            ])
+
+        # ←–– HERE: use the current brush colour for preview
+        color = self.brush.colour
+
         if getattr(self, "square_preview", None):
             self.canvas.coords(self.square_preview, *corners)
         else:
-            self.square_preview = self.canvas.create_polygon(*corners, outline="red", fill="", width=5, tags="drawing")
+            self.square_preview = self.canvas.create_polygon(
+                *corners,
+                outline=color,
+                fill="",
+                width=5,
+                tags="drawing"
+            )
+
         network.broadcast_event({
             "type": "square_preview",
             "corners": corners,
         })
 
     def _finalize_square(self) -> None:
-        # only finalize if there's an active preview
         if getattr(self, "square_preview", None) is not None:
-            # 1. pull the current corners
-            corners = self.canvas.coords(self.square_preview)  # [x1,y1, x2,y2, …]
-            # 2. broadcast before we destroy it
+            corners = self.canvas.coords(self.square_preview)
             network.broadcast_event({
                 "type": "square_finalize",
                 "corners": corners,
             })
-            # 3. commit the look
-            self.canvas.itemconfig(self.square_preview,
-                                   outline="black",
-                                   fill="",
-                                   width=5)
-            # 4. clear our preview handle
+
+            # ←–– HERE: commit using the current brush colour
+            final_color = self.brush.colour
+            self.canvas.itemconfig(
+                self.square_preview,
+                outline=final_color,
+                fill="",
+                width=5
+            )
+
             self.square_preview = None
+
 
     def _update_circle_preview(self, x1: int, y1: int, x2: int, y2: int, fw: int, fh: int) -> None:
         cx1, cy1 = self.to_canvas(x1, y1, frame_w=fw, frame_h=fh)
@@ -606,31 +628,43 @@ class GestureDrawingApp(DrawingApp):
         cx, cy = (cx1 + cx2) / 2, (cy1 + cy2) / 2
         r = math.hypot(cx2 - cx1, cy2 - cy1) / 2
         bbox = (cx - r, cy - r, cx + r, cy + r)
+
+        # ←–– HERE: use the current brush colour for preview
+        color = self.brush.colour
+
         if getattr(self, "circle_preview", None):
             self.canvas.coords(self.circle_preview, *bbox)
         else:
-            self.circle_preview = self.canvas.create_oval(*bbox, outline="red", fill="", width=5, tags="drawing")
+            self.circle_preview = self.canvas.create_oval(
+                *bbox,
+                outline=color,
+                fill="",
+                width=5,
+                tags="drawing"
+            )
+
         network.broadcast_event({
             "type": "circle_preview",
             "bbox": bbox,
         })
 
     def _finalize_circle(self) -> None:
-        # only finalize if there's an active preview
         if getattr(self, "circle_preview", None) is not None:
-            # 1. pull the bounding box
-            bbox = self.canvas.coords(self.circle_preview)  # [x1, y1, x2, y2]
-            # 2. broadcast before we destroy it
+            bbox = self.canvas.coords(self.circle_preview)
             network.broadcast_event({
                 "type": "circle_finalize",
                 "bbox": bbox,
             })
-            # 3. commit the look
-            self.canvas.itemconfig(self.circle_preview,
-                                   outline="black",
-                                   fill="",
-                                   width=5)
-            # 4. clear our preview handle
+
+            # ←–– HERE: commit using the current brush colour
+            final_color = self.brush.colour
+            self.canvas.itemconfig(
+                self.circle_preview,
+                outline=final_color,
+                fill="",
+                width=5
+            )
+
             self.circle_preview = None
 
     # --------------------------- misc helpers -----------------------------
