@@ -11,8 +11,7 @@ voice commands, and a **Tkinter** canvas for rendering.
 * Draw with 7 different brushes (solid, air, texture, calligraphy, blending, shining, eraser)
 * Voice commands for starting/stopping, changing colours, switching brushes, and drawing
   squares/circles
-* Mini *“guess what I’m drawing”* game with 30 random prompts
-* Dynamic calligraphy width based on stroke speed
+* Mini *“guess what I’m drawing”* game
 
 ---
 
@@ -23,29 +22,31 @@ voice commands, and a **Tkinter** canvas for rendering.
 $ git clone https://github.com/your‑user/drawing‑app.git
 $ cd drawing‑app
 
-# 2. Create and activate a virtual env (recommended)
-$ python -m venv venv
-$ source venv/bin/activate  # on Windows: venv\Scripts\activate
-
-# 3. Install Python dependencies
+# 2. Install Python dependencies
 $ pip install -r requirements.txt
 ```
 
-> **macOS + Continuity Camera**: If you see a deprecation warning about
-> `AVCaptureDeviceTypeExternal`, you can ignore it—the app still works fine.
+### 3. Fill out the config.py file with an API KEY from https://groq.com/ 
+
+### 4. To start remote:
+  The host has to run python gesture_drawing/server.py to start the server.
+  In the config.py file 
+  * the host has to set ` IP4_ADDRESS_OF_SERVER_HOST = "localhost"` `
+  * the client has to set it to the ip4 adress of the host. This adress is found by running: **$ ipconfig getifaddr en0** (en0 for WIFI, en1 for LAN) on the host computer (For MacOS). `IP4_ADDRESS_OF_SERVER_HOST = <HOST-IP> `
+
+  after running both programs it should sync as long as they are in the same network (WIFI).
 
 ---
 
 ## 🚀 Running the App
 
-Two equally valid options:
-
 ```bash
-# Package style (cleaner)
+# Run without LLM
 python -m gesture_drawing
 
-# Direct script (fallback)
-python path/to/gesture_drawing/main.py
+# Run with LLM (API KEY needed)
+python -m gesture_drawing --llm
+
 ```
 
 Make sure **one** webcam is connected; the first camera in the device list is used.
@@ -56,45 +57,10 @@ Make sure **one** webcam is connected; the first camera in the device list is us
 
 | Command                                                                     | Action                                                  |
 | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| **START / STOP**                                                            | Enable / disable freehand drawing                       |
+| **START / STOP / Spacebar**                                                            | Enable / disable freehand drawing                       |
 | **CHANGE BRUSH TO *solid/air/texture/calligraphy/blending/shining/eraser*** | Switch brushes                                          |
 | **CHANGE COLOR TO \<colour>**                                               | Any Tk‑recognised colour name (e.g. `red`, `#ff8800`)   |
 | **SQUARE / CIRCLE**                                                         | Toggle shape‑drawing mode (thumb + index controls size) |
 | **MY GUESS IS \<word>**                                                     | Guess the current prompt in the mini‑game               |
 
 Unrecognised brush types trigger a friendly message instead of crashing.
-
----
-
-## 🖱️ Basic Usage Flow
-
-1. **Say “START”** – the red fingertip cursor appears.
-2. Raise your **index finger straight** to paint; bend it to stop.
-3. Change brushes/colours as you draw.
-4. Say **“STOP”** or switch to shape mode when needed.
-
----
-
-## 📁 Project Structure
-
-```
-gesture_drawing/
-├── __init__.py            # Package marker & public re‑exports
-├── main.py                # Entry‑point (also `python -m gesture_drawing`)
-├── gesture_app.py         # Hand‑tracking, brushes, game logic
-├── drawing.py             # Generic Tk Canvas wrapper
-└── voice.py               # Speech‑recognition listener
-requirements.txt           # Third‑party deps (MediaPipe, OpenCV‑Python, etc.)
-README.md                  # You’re reading it
-```
-
-
-# To start remote:
-The host has to run python gesture_drawing/server.py to start the server.
-In the gesture_app the host has to set:
-* network.start_client("ws://localhost:6789")
-
-And the client has to set it to the ip4 adress of the host. This adress is found by running: **$ ipconfig getifaddr en0** on the host computer.<br>The client has to set 
-* network.start_client("ws://HOST-IP:6789")
-
-after running both programs it should sink as long as they are in the same network.

@@ -1,8 +1,19 @@
-tkinter
-Pillow
-opencv-python
-mediapipe
-SpeechRecognition
-PyAudio
-requests
-websockets
+# Python GUI
+# ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# tkinter is included with most Python installs.
+# On Debian/Ubuntu you may need: sudo apt install python3-tk
+
+# Image handling
+Pillow>=9.0.0
+
+# Computer vision & hand‐tracking
+opencv-python>=4.5.5.64
+mediapipe>=0.10.0
+
+# Voice recognition
+SpeechRecognition>=3.8.1
+PyAudio>=0.2.12
+
+# Networking & HTTP
+requests>=2.28.2
+websockets>=10.4
