@@ -86,7 +86,6 @@ class GestureDrawingApp(DrawingApp):
         super().__init__(master)
 
         self.master = master
-        self.first_round_done = False
 
         self._start_reminder_id: str | None = None
         self._next_drawer: str | None = None
@@ -229,32 +228,39 @@ class GestureDrawingApp(DrawingApp):
         cmd = raw.upper()
         if self.is_drawer:
             if cmd == "START":
-                    if not self.round_active:
-                        self._local_start_round(drawer_id=self._next_drawer)
-                        self._next_drawer = None
-                        self.round_active = True
-                        self.prompt_visible = True
+                # 1) If the round isn't active, this START just begins the game:
+                if not self.round_active:
+                    # only now actually *start* the round,
+                    # and if someone was queued as next_drawer, use that
+                    self._local_start_round(drawer_id=self._next_drawer)
+                    # clear so future rounds default back to you
+                    self._next_drawer = None
 
-                        if not self.first_round_done:
-                            self._start_reminder_id = self.master.after(
-                                5_000,
-                                lambda: (
-                                    setattr(self, "prompt_visible", False),
-                                    self._refresh_instruction("Say 'START' again to begin drawing.")
-                                )
-                            )
-                        else:
-                            # skip the first "reminder" step
-                            self.prompt_visible = False
-                            self.drawing_enabled = True
-                            self._refresh_instruction(
-                                "Say 'STOP' to stop drawing.",
-                                "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
-                                "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
-                            )
-                            network.broadcast_event({"type": "command", "command": "START"})
-                        self.first_round_done = True
-                        return
+                    self.round_active = True
+                    self.prompt_visible = True
+
+                    # store the after() ID so we can cancel it later
+                    self._start_reminder_id = self.master.after(
+                        5_000,
+                        lambda: (
+                            setattr(self, "prompt_visible", False),
+                            self._refresh_instruction("Say 'START' again to begin drawing.")
+                        )
+                    )
+                    return
+                if self._start_reminder_id is not None:
+                    self.master.after_cancel(self._start_reminder_id)
+                    self._start_reminder_id = None
+                self.prompt_visible = False
+                # 2) Round is active => now actually enable the brush:
+                self.drawing_enabled = True
+                self._refresh_instruction(
+                    "Say 'STOP' to stop drawing.",
+                    "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
+                    "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
+                )
+                network.broadcast_event({"type": "command", "command": "START"})
+                return
             if cmd == "STOP":
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
