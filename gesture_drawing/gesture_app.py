@@ -871,6 +871,7 @@ class GestureDrawingApp(DrawingApp):
 
     def _start_new_round(self, drawer: str, prompt: str):
         self.current_drawer = drawer
+        self._game_started = True
         self.current_prompt = prompt
         self.is_drawer = (drawer == self.client_id)
         # only the drawer should see the prompt word
