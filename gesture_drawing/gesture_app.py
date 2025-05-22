@@ -785,6 +785,7 @@ class GestureDrawingApp(DrawingApp):
                     "winner_id": ev["id"],
                     "prompt": self.current_prompt
                 })
+                self.is_drawer = False
 
                 # Delay new round start slightly after overlay
                 self.master.after(5000, lambda: self._local_start_round(drawer_id=ev["id"]))
