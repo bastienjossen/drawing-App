@@ -437,7 +437,6 @@ class GestureDrawingApp(DrawingApp):
         h, w, _ = frame_shape
         tip = landmarks.landmark[self._mphands.HandLandmark.INDEX_FINGER_TIP]
         x1, y1 = int(tip.x * w), int(tip.y * h)
-        finger_straight = self._is_index_straight(landmarks)
 
         if self.square_drawing_enabled:
             thumb = landmarks.landmark[self._mphands.HandLandmark.THUMB_TIP]
@@ -446,10 +445,10 @@ class GestureDrawingApp(DrawingApp):
             thumb = landmarks.landmark[self._mphands.HandLandmark.THUMB_TIP]
             self._update_circle_preview(x1, y1, int(thumb.x * w), int(thumb.y * h), w, h)
         else:
-            self._move_pointer(x1, y1, w, h, finger_straight)
+            self._move_pointer(x1, y1, w, h)
 
     # ------------------------------ drawing primitives --------------------
-    def _move_pointer(self, x: int, y: int, frame_w: int, frame_h: int, finger_straight: bool) -> None:
+    def _move_pointer(self, x: int, y: int, frame_w: int, frame_h: int) -> None:
         cx, cy = self.to_canvas(x, y, frame_w=frame_w, frame_h=frame_h)
 
         if self.pointer_id is None:
@@ -466,7 +465,7 @@ class GestureDrawingApp(DrawingApp):
 
         self.canvas.tag_raise("pointer")
 
-        if self.is_drawer and self.drawing_enabled and finger_straight:
+        if self.is_drawer and self.drawing_enabled:
             draw_func = {
                 BrushType.SOLID: self._draw_solid,
                 BrushType.AIR: self._draw_air,
@@ -713,13 +712,6 @@ class GestureDrawingApp(DrawingApp):
             )
 
             self.circle_preview = None
-
-    # --------------------------- misc helpers -----------------------------
-    @staticmethod
-    def _is_index_straight(landmarks) -> bool:  # Mediapipe landmark list
-        tip = landmarks.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_TIP]
-        dip = landmarks.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_DIP]
-        return tip.y < dip.y
 
     # --------------------------- cleanup ----------------------------------
     def __del__(self) -> None:
