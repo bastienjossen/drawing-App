@@ -90,6 +90,22 @@ class GestureDrawingApp(DrawingApp):
         self._start_reminder_id: str | None = None
         self._next_drawer: str | None = None
 
+        self._game_started   = False 
+
+        # helper: start 5-second prompt countdown ----------------
+        def queue_prompt_hide():
+            if self._start_reminder_id is not None:
+                self.master.after_cancel(self._start_reminder_id)
+            self._start_reminder_id = self.master.after(
+                5000,
+                lambda: (
+                    setattr(self, "prompt_visible", False),
+                    self._refresh_instruction("Say 'START' to begin drawing.")
+                )
+            )
+
+        self._queue_prompt_hide = queue_prompt_hide  # save as method
+
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
 
@@ -229,7 +245,8 @@ class GestureDrawingApp(DrawingApp):
         if self.is_drawer:
             if cmd == "START":
                 # 1) If the round isn't active, this START just begins the game:
-                if not self.round_active:
+                if not self._game_started:
+                    self._game_started = True
                     # only now actually *start* the round,
                     # and if someone was queued as next_drawer, use that
                     self._local_start_round(drawer_id=self._next_drawer)
@@ -239,18 +256,8 @@ class GestureDrawingApp(DrawingApp):
                     self.round_active = True
                     self.prompt_visible = True
 
-                    # store the after() ID so we can cancel it later
-                    self._start_reminder_id = self.master.after(
-                        5_000,
-                        lambda: (
-                            setattr(self, "prompt_visible", False),
-                            self._refresh_instruction("Say 'START' again to begin drawing.")
-                        )
-                    )
+                    self._queue_prompt_hide()          # show prompt 5 seconds
                     return
-                if self._start_reminder_id is not None:
-                    self.master.after_cancel(self._start_reminder_id)
-                    self._start_reminder_id = None
                 self.prompt_visible = False
                 # 2) Round is active => now actually enable the brush:
                 self.drawing_enabled = True
@@ -732,10 +739,7 @@ class GestureDrawingApp(DrawingApp):
                 print(f"------------   CONGRATULATIONS PEER {ev['id']}  ------------\nIT WAS '{self.current_prompt}'")
                 # host kicks off next round *with* the guesser as drawer
                 # peer got it right → schedule them as next drawer, but don't start yet
-                self._next_drawer = ev["id"]
-                self.round_active = False
-                self.canvas.delete("drawing")
-                self._refresh_instruction("Opponent guessed! Say 'START' to begin next round.")
+                self._local_start_round(drawer_id=ev["id"])
             else:
                 print(f"Peer {ev['id']} guessed '{ev['guess']}' – incorrect.")
                 self._evaluate_guess(ev["guess"])
@@ -878,7 +882,9 @@ class GestureDrawingApp(DrawingApp):
 
         self.canvas.delete("drawing")
         if self.is_drawer:
-            self._refresh_instruction(self._instruction_banner("Say 'START' to begin."))
+            self._refresh_instruction(self._instruction_banner("Say 'START' to begin drawing."))
+            self.prompt_visible = True        # show the word first
+            self._queue_prompt_hide()
         else:
             if USE_LLM:
                 self._refresh_instruction("Opponent is drawing — say your guess!")
