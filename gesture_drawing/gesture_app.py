@@ -96,16 +96,13 @@ class GestureDrawingApp(DrawingApp):
 
         self._game_started   = False 
 
-        # helper: start 5-second prompt countdown ----------------
+        # helper: start 10-second prompt countdown ----------------
         def queue_prompt_hide():
             if self._start_reminder_id is not None:
                 self.master.after_cancel(self._start_reminder_id)
             self._start_reminder_id = self.master.after(
                 10000,
-                lambda: (
-                    setattr(self, "prompt_visible", False),
-                    self._refresh_instruction("Say 'START' to begin drawing.")
-                )
+                lambda: self._hide_prompt_if_still_pending()
             )
 
         self._queue_prompt_hide = queue_prompt_hide  # save as method
@@ -181,6 +178,12 @@ class GestureDrawingApp(DrawingApp):
 
         # Kick‑off periodic update loop
         self._update_frame()
+
+    def _hide_prompt_if_still_pending(self):
+        # only hide the prompt if it’s still shown and drawing hasn’t started
+        if self.prompt_visible and not self.drawing_enabled:
+            self.prompt_visible = False
+            self._refresh_instruction("Say 'START' to begin drawing.")
 
     def _on_space(self, event: tk.Event) -> None:
         # decide if we're starting or stopping
