@@ -198,31 +198,35 @@ class GestureDrawingApp(DrawingApp):
             "command": cmd,
         })
 
-    def _on_mouse_down(self, event: tk.Event) -> None:
+    def _on_mouse_down(self, event):
         if not self.is_drawer or not self._game_started:
             return
-        # start a new “stroke”
-        self.last_x, self.last_y = event.x, event.y
+        self.prev_coord = (event.x, event.y)
 
-    def _on_mouse_drag(self, event: tk.Event) -> None:
+    def _on_mouse_drag(self, event):
         if not self.is_drawer or not self._game_started:
             return
-        # draw locally
-        x1, y1 = self.last_x, self.last_y
-        x2, y2 = event.x, event.y
-        self.canvas.create_line(x1, y1, x2, y2,
-                                fill=self.brush.colour,
-                                width=3,
-                                tags="drawing")
-        # broadcast to peers
-        self._broadcast({
-            "type": "line",
-            "coords": [x1, y1, x2, y2],
-            "colour": self.brush.colour,
-            "width": 3,
-        })
-        # advance the stroke
-        self.last_x, self.last_y = x2, y2
+
+        x, y = event.x, event.y
+
+        # dispatch to the appropriate draw func, which
+        # also takes care of broadcasting
+        draw_func = {
+            BrushType.SOLID:       self._draw_solid,
+            BrushType.AIR:         self._draw_air,
+            BrushType.TEXTURE:     self._draw_texture,
+            BrushType.CALLIGRAPHY: self._draw_calligraphy,
+            BrushType.BLENDING:    self._draw_blending,
+            BrushType.SHINING:     self._draw_shining,
+            BrushType.ERASER:      self._draw_eraser,
+        }[self.brush.kind]
+
+        # call it; it uses self.prev_coord internally
+        draw_func(x, y)
+        # no need to manually broadcast here
+
+        # update prev_coord so next segment is continuous
+        self.prev_coord = (x, y)
 
     def _on_mouse_up(self, _event: tk.Event) -> None:
         if not self.is_drawer or not self._game_started:
