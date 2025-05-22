@@ -4,7 +4,6 @@ from __future__ import annotations
 from . import network
 from queue import Queue
 import uuid
-
 import math
 import random
 import time
@@ -90,6 +89,7 @@ class GestureDrawingApp(DrawingApp):
         super().__init__(master)
 
         self.master = master
+        self.event_history: list[dict] = [] 
 
         self._start_reminder_id: str | None = None
         self._next_drawer: str | None = None
@@ -193,7 +193,7 @@ class GestureDrawingApp(DrawingApp):
         # 1) locally apply it
         self._handle_command(cmd)
         # 2) broadcast it so peers pick it up too
-        network.broadcast_event({
+        self._broadcast({
             "type": "command",
             "command": cmd,
         })
@@ -215,7 +215,7 @@ class GestureDrawingApp(DrawingApp):
                                 width=3,
                                 tags="drawing")
         # broadcast to peers
-        network.broadcast_event({
+        self._broadcast({
             "type": "line",
             "coords": [x1, y1, x2, y2],
             "colour": self.brush.colour,
@@ -273,13 +273,13 @@ class GestureDrawingApp(DrawingApp):
                     "Say 'SQUARE' or 'CIRCLE' to draw a square or circle.",
                     "Say 'CHANGE BRUSH TO …' or 'CHANGE COLOR TO …'.",
                 )
-                network.broadcast_event({"type": "command", "command": "START"})
+                self._broadcast({"type": "command", "command": "START"})
                 return
             if cmd == "STOP":
                 self.drawing_enabled = False
                 self.square_drawing_enabled = self.circle_drawing_enabled = False
                 self._refresh_instruction(self._instruction_banner("Say 'START' to resume."))
-                network.broadcast_event({"type": "command", "command": "STOP"})
+                self._broadcast({"type": "command", "command": "STOP"})
                 return
 
             if cmd.startswith("CHANGE BRUSH TO "):
@@ -332,7 +332,7 @@ class GestureDrawingApp(DrawingApp):
         else:
             if cmd.startswith("MY GUESS IS "):
                 guess = cmd.removeprefix("MY GUESS IS ").strip()
-                network.broadcast_event({
+                self._broadcast({
                     "type": "guess",
                     "id": self.client_id,
                     "guess": guess,
@@ -343,7 +343,7 @@ class GestureDrawingApp(DrawingApp):
         # evaluate locally
         correct = (guess.lower() == self.current_prompt.lower())
         # broadcast my guess + my id
-        network.broadcast_event({
+        self._broadcast({
             "type": "guess",
             "guess": guess,
             "id": self.client_id
@@ -458,7 +458,7 @@ class GestureDrawingApp(DrawingApp):
         else:
             self.canvas.coords(self.pointer_id, cx - 5, cy - 5, cx + 5, cy + 5)
 
-        network.broadcast_event({
+        self._broadcast({
             "type": "cursor",
             "id": self.client_id,
             "coords": [cx, cy],
@@ -488,7 +488,7 @@ class GestureDrawingApp(DrawingApp):
                                     fill=self.brush.colour,
                                     tags="drawing")
             # broadcast to peers
-            network.broadcast_event({
+            self._broadcast({
                 "type": "line",
                 "coords": [*self.prev_coord, x, y],
                 "colour": self.brush.colour,
@@ -504,7 +504,7 @@ class GestureDrawingApp(DrawingApp):
             self.canvas.create_oval(ox, oy, ox + 3, oy + 3,
                                     fill=self.brush.colour,
                                     tags="drawing")
-            network.broadcast_event({
+            self._broadcast({
                 "type": "air",
                 "coords": [ox, oy, ox + 3, oy + 3],
                 "colour": self.brush.colour,
@@ -516,7 +516,7 @@ class GestureDrawingApp(DrawingApp):
                                 fill=self.brush.colour,
                                 font=("Arial", 10),
                                 tags="drawing")
-        network.broadcast_event({
+        self._broadcast({
             "type": "texture",
             "coords": [x, y],
             "colour": self.brush.colour,
@@ -544,7 +544,7 @@ class GestureDrawingApp(DrawingApp):
                                    fill=self.brush.colour,
                                    outline=self.brush.colour,
                                    tags="drawing")
-        network.broadcast_event({
+        self._broadcast({
             "type": "calligraphy",
             "polygon": poly,
             "colour": self.brush.colour,
@@ -573,7 +573,7 @@ class GestureDrawingApp(DrawingApp):
                                     outline="",
                                     stipple="gray50",
                                     tags="drawing")
-            network.broadcast_event({
+            self._broadcast({
                 "type": "blending",
                 "coords": [ox, oy],
                 "colour": self.brush.colour,
@@ -591,7 +591,7 @@ class GestureDrawingApp(DrawingApp):
                                 fill=self.brush.colour,
                                 outline="",
                                 tags="drawing")
-        network.broadcast_event({
+        self._broadcast({
             "type": "shining",
             "center": [x, y],
             "colour": self.brush.colour,
@@ -604,7 +604,7 @@ class GestureDrawingApp(DrawingApp):
                                     width=self.eraser_width,
                                     fill=bg,
                                     tags="drawing")
-            network.broadcast_event({
+            self._broadcast({
                 "type": "eraser",
                 "coords": [*self.prev_coord, x, y],
                 "width": self.eraser_width,
@@ -642,7 +642,7 @@ class GestureDrawingApp(DrawingApp):
                 tags="drawing"
             )
 
-        network.broadcast_event({
+        self._broadcast({
             "type":   "square_preview",
             "corners": corners,
             "colour": color,
@@ -652,7 +652,7 @@ class GestureDrawingApp(DrawingApp):
         if getattr(self, "square_preview", None) is not None:
             corners = self.canvas.coords(self.square_preview)
             final_color = self.brush.colour
-            network.broadcast_event({
+            self._broadcast({
                 "type": "square_finalize",
                 "corners": corners,
                 "colour": final_color,
@@ -689,7 +689,7 @@ class GestureDrawingApp(DrawingApp):
                 tags="drawing"
             )
 
-        network.broadcast_event({
+        self._broadcast({
             "type": "circle_preview",
             "bbox": bbox,
             "colour": color,
@@ -699,7 +699,7 @@ class GestureDrawingApp(DrawingApp):
         if getattr(self, "circle_preview", None) is not None:
             bbox = self.canvas.coords(self.circle_preview)
             final_color = self.brush.colour
-            network.broadcast_event({
+            self._broadcast({
                 "type": "circle_finalize",
                 "bbox": bbox,
                  "colour": final_color,
@@ -736,6 +736,40 @@ class GestureDrawingApp(DrawingApp):
     def _apply_event(self, ev: dict):
         """Draw whatever your peer just sent."""
         t = ev.get("type")
+
+        if t == "hello" and self.is_drawer:
+            network.send_direct(
+                ev["id"],
+                {
+                    "type":   "state_snapshot",
+                    "drawer": self.current_drawer,
+                    "prompt": self.current_prompt,
+                    "history": self.event_history,
+                    "game_started": self._game_started,
+                    "round_active": self.round_active,
+                }
+            )
+            return
+        
+        if t == "state_snapshot":
+            self._game_started = ev["game_started"]
+            self.round_active  = ev["round_active"]
+            self.current_drawer = ev["drawer"]
+            self.is_drawer = (self.current_drawer == self.client_id)
+            self.current_prompt = ev["prompt"]
+            self.canvas.delete("drawing")
+            for old_ev in ev["history"]:
+                self._apply_event(old_ev)          # reuse existing logic
+            if self.is_drawer:
+                self.prompt_visible = True
+                self._refresh_instruction("Say 'START' to begin drawing.")
+                self._queue_prompt_hide()
+            else:
+                self.prompt_visible = False
+                self._refresh_instruction(
+                    "Opponent is drawing — say 'MY GUESS IS …' to guess!"
+                )
+            return
 
         if t == "start_round":
             self._start_new_round(ev["drawer_id"], ev["prompt"])
@@ -909,8 +943,14 @@ class GestureDrawingApp(DrawingApp):
         self.round_active = True
 
         # broadcast exactly once
-        network.broadcast_event({
+        self._broadcast({
             "type": "start_round",
             "drawer_id": drawer,
             "prompt": word,
         })
+
+    def _broadcast(self, data: dict) -> None:
+        """Send an event to peers and keep it in history (except transient ones)."""
+        if data["type"] not in ("cursor",):           # cursors don’t matter for replay
+            self.event_history.append(data)
+        network.broadcast_event(data)
