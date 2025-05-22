@@ -636,14 +636,13 @@ class GestureDrawingApp(DrawingApp):
     def _finalize_square(self) -> None:
         if getattr(self, "square_preview", None) is not None:
             corners = self.canvas.coords(self.square_preview)
+            final_color = self.brush.colour
             network.broadcast_event({
                 "type": "square_finalize",
                 "corners": corners,
                 "colour": final_color,
             })
 
-            # ←–– HERE: commit using the current brush colour
-            final_color = self.brush.colour
             self.canvas.itemconfig(
                 self.square_preview,
                 outline=final_color,
@@ -684,14 +683,13 @@ class GestureDrawingApp(DrawingApp):
     def _finalize_circle(self) -> None:
         if getattr(self, "circle_preview", None) is not None:
             bbox = self.canvas.coords(self.circle_preview)
+            final_color = self.brush.colour
             network.broadcast_event({
                 "type": "circle_finalize",
                 "bbox": bbox,
                  "colour": final_color,
             })
 
-            # ←–– HERE: commit using the current brush colour
-            final_color = self.brush.colour
             self.canvas.itemconfig(
                 self.circle_preview,
                 outline=final_color,
