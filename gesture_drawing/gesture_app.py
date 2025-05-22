@@ -777,14 +777,10 @@ class GestureDrawingApp(DrawingApp):
 
         if t == "guess" and self.is_drawer:
             if ev["guess"].lower() == self.current_prompt.lower():
-                winner = ev["id"]
-                if winner == self.client_id:
-                    winner = "you"
-                congrats = f"✔ Peer {winner} guessed right!\nIt was '{self.current_prompt}'"
-                self._show_overlay_message(congrats)
                 self._broadcast({
                     "type": "correct_guess",
-                    "text": congrats
+                    "winner_id": ev["id"],
+                    "prompt": self.current_prompt
                 })
 
                 # Delay new round start slightly after overlay
@@ -800,8 +796,14 @@ class GestureDrawingApp(DrawingApp):
             return
         
         if t == "correct_guess":
-            self._show_overlay_message(ev["text"])
+            winner_id = ev["winner_id"]
+            is_you = (winner_id == self.client_id)
+            self.canvas.delete("drawing")
+            winner_label = "you" if is_you else winner_id
+            msg = f"✔ Peer {winner_label} guessed right!\nIt was '{ev['prompt']}'"
+            self._show_overlay_message(msg)
             return
+
 
         if t == "line":
             x1, y1, x2, y2 = ev["coords"]
