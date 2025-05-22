@@ -777,10 +777,18 @@ class GestureDrawingApp(DrawingApp):
 
         if t == "guess" and self.is_drawer:
             if ev["guess"].lower() == self.current_prompt.lower():
-                print(f"------------   CONGRATULATIONS PEER {ev['id']}  ------------\nIT WAS '{self.current_prompt}'")
-                # host kicks off next round *with* the guesser as drawer
-                # peer got it right → schedule them as next drawer, but don't start yet
-                self._local_start_round(drawer_id=ev["id"])
+                winner = ev["id"]
+                if winner == self.client_id:
+                    winner = "you"
+                congrats = f"✔ Peer {winner} guessed right!\nIt was '{self.current_prompt}'"
+                self._show_overlay_message(congrats)
+                self._broadcast({
+                    "type": "correct_guess",
+                    "text": congrats
+                })
+
+                # Delay new round start slightly after overlay
+                self.master.after(3000, lambda: self._local_start_round(drawer_id=ev["id"]))
             else:
                 print(f"Peer {ev['id']} guessed '{ev['guess']}' – incorrect.")
                 self._evaluate_guess(ev["guess"])
@@ -789,6 +797,10 @@ class GestureDrawingApp(DrawingApp):
         if t == "command":
             # a peer hit space (or spoke START/STOP)
             self._handle_command(ev["command"])
+            return
+        
+        if t == "correct_guess":
+            self._show_overlay_message(ev["text"])
             return
 
         if t == "line":
@@ -954,3 +966,16 @@ class GestureDrawingApp(DrawingApp):
         if data["type"] not in ("cursor",):           # cursors don’t matter for replay
             self.event_history.append(data)
         network.broadcast_event(data)
+
+    def _show_overlay_message(self, text: str, duration_ms: int = 3000) -> None:
+        """Show a large centered message temporarily."""
+        w, h = self.master.winfo_width() // 2, self.master.winfo_height() // 2
+        overlay = self.canvas.create_text(
+            w, h,
+            text=text,
+            font=("Arial", 24, "bold"),
+            fill="green",
+            justify="center",
+            tags="overlay"
+        )
+        self.master.after(duration_ms, lambda: self.canvas.delete(overlay))
