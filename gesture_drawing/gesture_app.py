@@ -59,7 +59,6 @@ _PROMPTS: Sequence[str] = (
     "Car",
     "Cat",
     "Chair",
-    "Ball",
     "Shoe",
     "Hat",
     "Bed",
@@ -72,8 +71,13 @@ _PROMPTS: Sequence[str] = (
     "Nose",
     "Fork",
     "Hand",
-    "Eye",
     "Ring",
+    "Football",
+    "Table",
+    "Elephant",
+    "Guitar",
+    "Piano",
+    "Lion",
 )
 
 
@@ -89,6 +93,19 @@ class GestureDrawingApp(DrawingApp):
 
         self._start_reminder_id: str | None = None
         self._next_drawer: str | None = None
+
+        self._game_started   = False 
+
+        # helper: start 10-second prompt countdown ----------------
+        def queue_prompt_hide():
+            if self._start_reminder_id is not None:
+                self.master.after_cancel(self._start_reminder_id)
+            self._start_reminder_id = self.master.after(
+                10000,
+                lambda: self._hide_prompt_if_still_pending()
+            )
+
+        self._queue_prompt_hide = queue_prompt_hide  # save as method
 
         self.client_id = str(uuid.uuid4())
         self.remote_cursors: dict[str, int] = {}  # maps peer_id → canvas item
@@ -162,6 +179,12 @@ class GestureDrawingApp(DrawingApp):
         # Kick‑off periodic update loop
         self._update_frame()
 
+    def _hide_prompt_if_still_pending(self):
+        # only hide the prompt if it’s still shown and drawing hasn’t started
+        if self.prompt_visible and not self.drawing_enabled:
+            self.prompt_visible = False
+            self._refresh_instruction("Say 'START' to begin drawing.")
+
     def _on_space(self, event: tk.Event) -> None:
         # decide if we're starting or stopping
         if not self.is_drawer:
@@ -176,13 +199,13 @@ class GestureDrawingApp(DrawingApp):
         })
 
     def _on_mouse_down(self, event: tk.Event) -> None:
-        if not self.is_drawer:
+        if not self.is_drawer or not self._game_started:
             return
         # start a new “stroke”
         self.last_x, self.last_y = event.x, event.y
 
     def _on_mouse_drag(self, event: tk.Event) -> None:
-        if not self.is_drawer:
+        if not self.is_drawer or not self._game_started:
             return
         # draw locally
         x1, y1 = self.last_x, self.last_y
@@ -202,7 +225,7 @@ class GestureDrawingApp(DrawingApp):
         self.last_x, self.last_y = x2, y2
 
     def _on_mouse_up(self, _event: tk.Event) -> None:
-        if not self.is_drawer:
+        if not self.is_drawer or not self._game_started:
             return
         # finish stroke
         self.last_x = self.last_y = None
@@ -229,7 +252,8 @@ class GestureDrawingApp(DrawingApp):
         if self.is_drawer:
             if cmd == "START":
                 # 1) If the round isn't active, this START just begins the game:
-                if not self.round_active:
+                if not self._game_started:
+                    self._game_started = True
                     # only now actually *start* the round,
                     # and if someone was queued as next_drawer, use that
                     self._local_start_round(drawer_id=self._next_drawer)
@@ -239,18 +263,8 @@ class GestureDrawingApp(DrawingApp):
                     self.round_active = True
                     self.prompt_visible = True
 
-                    # store the after() ID so we can cancel it later
-                    self._start_reminder_id = self.master.after(
-                        5_000,
-                        lambda: (
-                            setattr(self, "prompt_visible", False),
-                            self._refresh_instruction("Say 'START' again to begin drawing.")
-                        )
-                    )
+                    self._queue_prompt_hide()          # show prompt 5 seconds
                     return
-                if self._start_reminder_id is not None:
-                    self.master.after_cancel(self._start_reminder_id)
-                    self._start_reminder_id = None
                 self.prompt_visible = False
                 # 2) Round is active => now actually enable the brush:
                 self.drawing_enabled = True
@@ -732,10 +746,7 @@ class GestureDrawingApp(DrawingApp):
                 print(f"------------   CONGRATULATIONS PEER {ev['id']}  ------------\nIT WAS '{self.current_prompt}'")
                 # host kicks off next round *with* the guesser as drawer
                 # peer got it right → schedule them as next drawer, but don't start yet
-                self._next_drawer = ev["id"]
-                self.round_active = False
-                self.canvas.delete("drawing")
-                self._refresh_instruction("Opponent guessed! Say 'START' to begin next round.")
+                self._local_start_round(drawer_id=ev["id"])
             else:
                 print(f"Peer {ev['id']} guessed '{ev['guess']}' – incorrect.")
                 self._evaluate_guess(ev["guess"])
@@ -867,6 +878,7 @@ class GestureDrawingApp(DrawingApp):
 
     def _start_new_round(self, drawer: str, prompt: str):
         self.current_drawer = drawer
+        self._game_started = True
         self.current_prompt = prompt
         self.is_drawer = (drawer == self.client_id)
         # only the drawer should see the prompt word
@@ -878,7 +890,9 @@ class GestureDrawingApp(DrawingApp):
 
         self.canvas.delete("drawing")
         if self.is_drawer:
-            self._refresh_instruction(self._instruction_banner("Say 'START' to begin."))
+            self._refresh_instruction(self._instruction_banner("Say 'START' to begin drawing."))
+            self.prompt_visible = True        # show the word first
+            self._queue_prompt_hide()
         else:
             if USE_LLM:
                 self._refresh_instruction("Opponent is drawing — say your guess!")
