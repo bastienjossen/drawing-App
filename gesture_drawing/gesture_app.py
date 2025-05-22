@@ -783,8 +783,15 @@ class GestureDrawingApp(DrawingApp):
                     "prompt": self.current_prompt
                 })
 
+                # ✅ apply the event locally too:
+                self._apply_event({
+                    "type": "correct_guess",
+                    "winner_id": ev["id"],
+                    "prompt": self.current_prompt
+                })
+
                 # Delay new round start slightly after overlay
-                self.master.after(3000, lambda: self._local_start_round(drawer_id=ev["id"]))
+                self.master.after(5000, lambda: self._local_start_round(drawer_id=ev["id"]))
             else:
                 print(f"Peer {ev['id']} guessed '{ev['guess']}' – incorrect.")
                 self._evaluate_guess(ev["guess"])
@@ -799,8 +806,8 @@ class GestureDrawingApp(DrawingApp):
             winner_id = ev["winner_id"]
             is_you = (winner_id == self.client_id)
             self.canvas.delete("drawing")
-            winner_label = "you" if is_you else winner_id
-            msg = f"✔ Peer {winner_label} guessed right!\nIt was '{ev['prompt']}'"
+            winner_label = "You" if is_you else f"Peer {winner_id}"
+            msg = f"{winner_label} guessed right!\nIt was '{ev['prompt']}'"
             self._show_overlay_message(msg)
             return
 
@@ -969,7 +976,7 @@ class GestureDrawingApp(DrawingApp):
             self.event_history.append(data)
         network.broadcast_event(data)
 
-    def _show_overlay_message(self, text: str, duration_ms: int = 3000) -> None:
+    def _show_overlay_message(self, text: str, duration_ms: int = 5000) -> None:
         """Show a large centered message temporarily."""
         w, h = self.master.winfo_width() // 2, self.master.winfo_height() // 2
         overlay = self.canvas.create_text(
