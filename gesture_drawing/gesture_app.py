@@ -59,7 +59,6 @@ _PROMPTS: Sequence[str] = (
     "Car",
     "Cat",
     "Chair",
-    "Ball",
     "Shoe",
     "Hat",
     "Bed",
@@ -72,8 +71,13 @@ _PROMPTS: Sequence[str] = (
     "Nose",
     "Fork",
     "Hand",
-    "Eye",
     "Ring",
+    "Football",
+    "Table",
+    "Elephant",
+    "Guitar",
+    "Piano",
+    "Lion",
 )
 
 
@@ -97,7 +101,7 @@ class GestureDrawingApp(DrawingApp):
             if self._start_reminder_id is not None:
                 self.master.after_cancel(self._start_reminder_id)
             self._start_reminder_id = self.master.after(
-                5000,
+                10000,
                 lambda: (
                     setattr(self, "prompt_visible", False),
                     self._refresh_instruction("Say 'START' to begin drawing.")
@@ -192,13 +196,13 @@ class GestureDrawingApp(DrawingApp):
         })
 
     def _on_mouse_down(self, event: tk.Event) -> None:
-        if not self.is_drawer:
+        if not self.is_drawer or not self._game_started:
             return
         # start a new “stroke”
         self.last_x, self.last_y = event.x, event.y
 
     def _on_mouse_drag(self, event: tk.Event) -> None:
-        if not self.is_drawer:
+        if not self.is_drawer or not self._game_started:
             return
         # draw locally
         x1, y1 = self.last_x, self.last_y
@@ -218,7 +222,7 @@ class GestureDrawingApp(DrawingApp):
         self.last_x, self.last_y = x2, y2
 
     def _on_mouse_up(self, _event: tk.Event) -> None:
-        if not self.is_drawer:
+        if not self.is_drawer or not self._game_started:
             return
         # finish stroke
         self.last_x = self.last_y = None

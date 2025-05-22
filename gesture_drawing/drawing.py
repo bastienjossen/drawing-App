@@ -10,7 +10,7 @@ from tkinter import BOTH, Canvas
 class DrawingApp:  # noqa: D101 (simple base‑class)
     def __init__(self, master: tk.Tk | tk.Toplevel) -> None:
         self.master = master
-        self.canvas: Canvas = tk.Canvas(self.master, bg="white", width=1500, height=800)
+        self.canvas: Canvas = tk.Canvas(self.master, bg="white", width=1300, height=700)
         self.canvas.pack(fill=BOTH, expand=True)
 
     # -----------------------------------------------------------------
