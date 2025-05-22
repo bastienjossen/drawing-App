@@ -4,26 +4,7 @@ import requests
 from functools import lru_cache
 from typing import Optional
 import os
-import json
-
-# ─── Load config from llm_config.json ────────────────────────────────
-_cfg_path = os.path.join(os.path.dirname(__file__), "llm_config.json")
-try:
-    with open(_cfg_path, "r", encoding="utf-8") as _f:
-        _cfg = json.load(_f)
-except FileNotFoundError:
-    raise RuntimeError(f"Could not find configuration file at {_cfg_path!r}")
-except json.JSONDecodeError as e:
-    raise RuntimeError(f"Invalid JSON in config file {_cfg_path!r}: {e}")
-
-API_KEY = _cfg.get("API_KEY")
-API_URL = _cfg.get(
-    "API_URL",
-    "https://api.groq.com/openai/v1/chat/completions"
-)
-
-if not API_KEY:
-    raise RuntimeError(f"`API_KEY` missing from config file {_cfg_path!r}")
+from .config import API_KEY, API_URL
 
 HEADERS = {
     "Content-Type": "application/json",

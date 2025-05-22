@@ -13,6 +13,7 @@ from PIL import Image, ImageTk
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Iterable, Sequence
+from .config import IP4_ADDRESS_OF_SERVER_HOST
 
 import cv2
 import mediapipe as mp
@@ -113,7 +114,7 @@ class GestureDrawingApp(DrawingApp):
         )
 
         # start network client (point to your server)
-        network.start_client("ws://localhost:6789")
+        network.start_client(f"ws://{IP4_ADDRESS_OF_SERVER_HOST}:6789")
         self.master.after(20, self._poll_network)
 
         master.title("Gesture Drawing Application")
